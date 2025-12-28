@@ -9,9 +9,10 @@ interface Conversation {
 
 interface ConversationHistoryProps {
     onSelect: (id: string) => void;
+    onDelete?: (id: string) => void;
 }
 
-const ConversationHistory: React.FC<ConversationHistoryProps> = ({ onSelect }) => {
+const ConversationHistory: React.FC<ConversationHistoryProps> = ({ onSelect, onDelete }) => {
     const [conversations, setConversations] = useState<Conversation[]>([]);
 
     useEffect(() => {
@@ -32,6 +33,7 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({ onSelect }) =
         if (confirm('Delete this conversation?')) {
             await window.electronAPI.conversationDelete(id);
             setConversations(prev => prev.filter(c => c.id !== id));
+            if (onDelete) onDelete(id);
         }
     };
 

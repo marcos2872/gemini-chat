@@ -64,6 +64,12 @@ const App: React.FC = () => {
             .catch(err => console.error('Failed to change model', err));
     };
 
+    const handleDeleteConversation = async (id: string) => {
+        if (currentConversationId === id) {
+            await handleNewConversation();
+        }
+    };
+
     return (
         <div className="app-container" style={{ flexDirection: 'row', height: '100vh', display: 'flex' }}>
             {/* Sidebar */}
@@ -75,7 +81,7 @@ const App: React.FC = () => {
                         <button onClick={handleNewConversation} style={{ background: 'none', border: '1px solid #4CAF50', color: '#4CAF50', borderRadius: '4px', cursor: 'pointer', padding: '2px 8px', fontSize: '0.8rem' }}>+ New</button>
                     </div>
                     <div style={{ flex: 1, overflowY: 'auto' }}>
-                        <ConversationHistory onSelect={handleSelectConversation} />
+                        <ConversationHistory onSelect={handleSelectConversation} onDelete={handleDeleteConversation} />
                     </div>
                 </div>
 
