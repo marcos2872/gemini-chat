@@ -42,6 +42,14 @@ app.whenReady().then(async () => {
 
     createWindow();
 
+    // Connect to MCP servers on startup
+    console.log('[Main] Connecting to MCP servers...');
+    mcpManager.connectAll().then(() => {
+        console.log('[Main] MCP servers connected.');
+    }).catch(err => {
+        console.error('[Main] Failed to connect to MCP servers:', err);
+    });
+
     app.on('activate', function () {
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
@@ -209,6 +217,15 @@ ipcMain.handle('mcp:test', async (event, name) => {
         return { success: true, connected: result };
     } catch (err) {
         return { success: false, error: err.message };
+    }
+});
+
+ipcMain.handle('mcp:list-tools', async () => {
+    try {
+        return await mcpManager.getAllTools();
+    } catch (err) {
+        log('MCP', `Error listing tools: ${err.message}`);
+        return [];
     }
 });
 
