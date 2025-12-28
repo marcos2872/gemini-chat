@@ -22,13 +22,13 @@ const MCPServerPanel: React.FC = () => {
 
         // Also load tools, resources, prompts
         try {
-            const [t, r, p] = await Promise.all([
+            const [t, p] = await Promise.all([
                 window.electronAPI.mcpListTools(),
-                window.electronAPI.mcpListResources(),
+                // window.electronAPI.mcpListResources(),
                 window.electronAPI.mcpListPrompts()
             ]);
             setTools(t);
-            setResources(r);
+            setResources([]);
             setPrompts(p);
         } catch (e) {
             console.error('Failed to load MCP capabilities', e);
@@ -132,6 +132,7 @@ const MCPServerPanel: React.FC = () => {
                             )}
 
                             {
+                                /* Disabled resources UI
                                 serverResources.length > 0 && (
                                     <div style={{ marginBottom: '0.5rem' }}>
                                         <div style={{ fontSize: '0.7em', textTransform: 'uppercase', color: '#666', marginBottom: '2px' }}>Resources</div>
@@ -151,6 +152,7 @@ const MCPServerPanel: React.FC = () => {
                                         </div>
                                     </div>
                                 )
+                                */
                             }
 
                             {

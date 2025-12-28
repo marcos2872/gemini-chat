@@ -279,12 +279,5 @@ ipcMain.handle('mcp:test-config', async (event, config) => {
     }
 });
 
-ipcMain.handle('mcp:list-tools', async () => {
-    try {
-        return await mcpManager.getAllTools();
-    } catch (err) {
-        log('MCP', `Error listing tools: ${err.message}`);
-        return [];
-    }
-});
+
 
