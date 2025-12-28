@@ -192,6 +192,23 @@ class MCPServerManager {
     }
 
     /**
+     * Get a specific prompt from a server
+     * @param {string} serverName 
+     * @param {string} promptName 
+     * @param {Object} args 
+     */
+    async getPrompt(serverName, promptName, args = {}) {
+        const client = this.clients.get(serverName);
+        if (!client) throw new Error(`Server ${serverName} is not connected.`);
+
+        const result = await client.getPrompt({
+            name: promptName,
+            arguments: args
+        });
+        return result;
+    }
+
+    /**
      * Exec tool call
      */
     async callTool(namespacedToolName, args) {

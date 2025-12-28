@@ -110,6 +110,27 @@ const MCPServerPanel: React.FC = () => {
         }
     };
 
+    const handlePromptClick = async (serverName: string, promptName: string) => {
+        try {
+            // Fetch the prompt content from the server
+            // For now, we assume no arguments or use default
+            const result = await window.electronAPI.mcpGetPrompt(serverName, promptName, {});
+
+            // Format messages into a single string to put in the chat input
+            if (result && result.messages) {
+                const text = result.messages.map((m: any) => m.content.type === 'text' ? m.content.text : '').join('\n\n');
+
+                // Dispatch event to ChatInterface
+                const event = new CustomEvent('set-chat-input', { detail: text });
+                window.dispatchEvent(event);
+            }
+        } catch (e) {
+            console.error('Failed to get prompt:', e);
+            // Fallback: just insert the name/command style?
+            // alert(`Failed to get prompt content: ${e}`);
+        }
+    };
+
     return (
         <div style={{ width: '100%', height: '100%', backgroundColor: '#252526', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '1rem', borderBottom: '1px solid #3E3E42', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -158,14 +179,20 @@ const MCPServerPanel: React.FC = () => {
 
                             <CollapsibleSection title="Prompts" count={serverPrompts.length}>
                                 {serverPrompts.map((p, i) => (
-                                    <span key={i} title={p.description} style={{
-                                        fontSize: '0.7rem',
-                                        backgroundColor: '#3B2D3B',
-                                        padding: '2px 4px',
-                                        borderRadius: '3px',
-                                        border: '1px solid #444',
-                                        color: '#C586C0'
-                                    }}>
+                                    <span
+                                        key={i}
+                                        onClick={() => handlePromptClick(s.name, p.name)}
+                                        title={p.description}
+                                        style={{
+                                            fontSize: '0.7rem',
+                                            backgroundColor: '#3B2D3B',
+                                            padding: '2px 4px',
+                                            borderRadius: '3px',
+                                            border: '1px solid #444',
+                                            color: '#C586C0',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
                                         {p.name}
                                     </span>
                                 ))}

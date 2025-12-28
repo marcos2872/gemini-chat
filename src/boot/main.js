@@ -233,6 +233,14 @@ ipcMain.handle('mcp:list', async () => {
 ipcMain.handle('mcp:list-tools', async () => mcpManager.getAllTools());
 ipcMain.handle('mcp:list-resources', async () => mcpManager.getAllResources());
 ipcMain.handle('mcp:list-prompts', async () => mcpManager.getAllPrompts());
+ipcMain.handle('mcp:get-prompt', async (event, serverName, promptName, args) => {
+    try {
+        return await mcpManager.getPrompt(serverName, promptName, args);
+    } catch (err) {
+        log('MCP', `Error getting prompt ${promptName} from ${serverName}: ${err.message}`);
+        throw err;
+    }
+});
 
 ipcMain.handle('mcp:add', async (event, server) => {
     try {

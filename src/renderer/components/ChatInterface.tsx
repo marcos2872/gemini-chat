@@ -103,6 +103,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models, c
         if (window.electronAPI.onApprovalRequest) {
             window.electronAPI.onApprovalRequest(handleApproval);
         }
+
+        // Custom event for setting input from other components
+        const handleSetInput = (e: CustomEvent) => {
+            setInput(e.detail);
+        };
+        window.addEventListener('set-chat-input', handleSetInput as EventListener);
+
+        return () => {
+            // Clean up both listeners? onApprovalRequest doesn't really have an off method exposed here easily without a ref, 
+            // but we should clean up the DOM listener
+            window.removeEventListener('set-chat-input', handleSetInput as EventListener);
+        };
     }, []);
 
     const handleApprovalResponse = (approved: boolean) => {
