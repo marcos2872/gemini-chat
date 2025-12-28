@@ -144,6 +144,9 @@ ipcMain.handle('gemini:prompt', async (event, prompt) => {
                     };
                     activeConversation.messages.push(statusMsg);
 
+                    // Save conversation immediately to persist the decision
+                    storage.saveConversation(activeConversation).catch(err => log('IPC', `Error saving intermediate state: ${err.message}`));
+
                     // Send real-time update to renderer
                     const win = BrowserWindow.getAllWindows()[0];
                     if (win) {

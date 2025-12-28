@@ -116,17 +116,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models, c
             window.electronAPI.onConversationUpdate((updatedConversation: any) => {
                 if (updatedConversation.id === conversationId) {
                     // We need to trigger a re-render/update
-                    // Since ChatInterface fetches history on load/id change, 
-                    // we might need to manually update local messages or trigger reload.
-                    // Ideally, ChatInterface should just receive messages as props or 
-                    // setMessages locally.
-                    // But here we're fetching in useEffect.
-
-                    // Let's assume the component manages its own 'messages' state.
-                    // We should merge or replace.
-                    window.electronAPI.conversationLoad(updatedConversation.id).then(conv => {
-                        if (conv) setMessages(conv.messages);
-                    });
+                    // Update state directly with the payload
+                    setMessages(updatedConversation.messages);
                 }
             });
         }
