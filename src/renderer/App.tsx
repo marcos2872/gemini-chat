@@ -7,7 +7,7 @@ const App: React.FC = () => {
     const [view, setView] = useState<'chat' | 'history'>('chat');
     const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
     const [models, setModels] = useState<Array<{ name: string; displayName: string }>>([]);
-    const [currentModel, setCurrentModel] = useState('gemini-2.5-flash-preview-09-2025');
+    const [currentModel, setCurrentModel] = useState('gemini-2.5-flash-lite');
 
     const handleNewConversation = async () => {
         const conv = await window.electronAPI.conversationNew();
