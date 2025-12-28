@@ -63,7 +63,7 @@ const MCPServerPanel: React.FC = () => {
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto' }}>
-                {servers.map(s => (
+                {Array.isArray(servers) && servers.map(s => (
                     <div key={s.name} style={{ padding: '0.8rem', borderBottom: '1px solid #3E3E42' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                             <strong>{s.name}</strong>

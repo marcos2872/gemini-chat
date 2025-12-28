@@ -91,7 +91,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
             <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
-                {messages.map((msg, idx) => (
+                {Array.isArray(messages) && messages.map((msg, idx) => (
                     <div key={idx} style={{
                         marginBottom: '1rem',
                         alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',

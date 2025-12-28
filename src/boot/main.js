@@ -22,7 +22,7 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../../dist/renderer/index.html'));
 
     // Open the DevTools.
-    // mainWindow.webContents.openDevTools();
+    mainWindow.webContents.openDevTools();
 }
 
 const GeminiClient = require('./gemini-client');
@@ -127,8 +127,9 @@ ipcMain.handle('gemini:prompt', async (event, prompt) => {
 ipcMain.handle('gemini:history', () => gemini.getHistory()); // Raw client history, distinct from conversation storage
 
 // Conversation Management Handlers
-ipcMain.handle('conversation:new', () => {
+ipcMain.handle('conversation:new', async () => {
     activeConversation = storage.createConversation();
+    await storage.saveConversation(activeConversation);
     return activeConversation;
 });
 

@@ -45,7 +45,7 @@ class ConversationStorage {
     async loadConversation(id) {
         const filePath = path.join(this.storagePath, `${id}.json`);
         try {
-            const content = await fs.readFile(filePath, 'utf8') || '{}';
+            const content = await fs.readFile(filePath, 'utf8');
             return JSON.parse(content);
         } catch (err) {
             if (err.code === 'ENOENT') throw new Error('Conversation not found');

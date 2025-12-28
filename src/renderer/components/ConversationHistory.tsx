@@ -34,7 +34,7 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({ onSelect }) =
         <div style={{ padding: '1rem', flex: 1, overflowY: 'auto' }}>
             <h2>History</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {conversations.map(c => (
+                {Array.isArray(conversations) && conversations.map(c => (
                     <div
                         key={c.id}
                         onClick={() => onSelect(c.id)}

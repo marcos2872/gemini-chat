@@ -30,38 +30,59 @@ class GeminiClient {
      */
     async initialize() {
         return new Promise((resolve, reject) => {
-            if (this.initialized) return resolve();
-
-            // Check if gemini might be installed (simple check, or skip)
-            // For this implementation, we assume 'gemini' is in PATH or handle error on spawn
+            if (this.initialized && this.process) return resolve();
 
             try {
                 console.log('[Gemini] Spawning process...');
-                // Using 'cat' as a dummy for testing if gemini doesn't exist? 
-                // No, I'll use 'gemini' and handle the error.
-                this.process = spawn('gemini', ['chat'], { // Assuming 'chat' mode for interactive
+                this.process = spawn('gemini', ['chat'], {
                     stdio: ['pipe', 'pipe', 'pipe'],
-                    env: { ...process.env, TERM: 'dumb' } // Avoid color codes if possible
+                    env: { ...process.env } // Remove FORCE_COLOR or TERM overrides that might confuse it
                 });
 
-                this.process.stdout.on('data', this._handleStdout.bind(this));
-                this.process.stderr.on('data', this._handleStderr.bind(this));
+                let resolved = false;
+
+                this.process.stdout.on('data', (chunk) => {
+                    const text = chunk.toString();
+                    console.log('[Gemini] stdout:', text);
+                    this.buffer += text;
+
+                    // Initialization check
+                    if (!resolved && text.toLowerCase().includes('ready')) {
+                        console.log('[Gemini] Detected ready signal.');
+                        this.initialized = true;
+                        resolved = true;
+                        resolve();
+                    }
+
+                    // Regular handling
+                    this._handleStdout(chunk);
+                });
+
+                this.process.stderr.on('data', (chunk) => {
+                    console.error('[Gemini] stderr:', chunk.toString());
+                    // Some tools print "ready" to stderr
+                    if (!resolved && chunk.toString().toLowerCase().includes('ready')) {
+                        console.log('[Gemini] Detected ready signal in stderr.');
+                        this.initialized = true;
+                        resolved = true;
+                        resolve();
+                    }
+                });
 
                 this.process.on('error', (err) => {
                     console.error('[Gemini] Process error:', err);
-                    if (!this.initialized) reject(err);
+                    if (!resolved) { resolved = true; reject(err); }
                 });
 
                 this.process.on('close', (code) => {
                     console.log(`[Gemini] Process exited with code ${code}`);
                     this.initialized = false;
                     this.process = null;
+                    if (!resolved) {
+                        resolved = true;
+                        reject(new Error(`Process exited early with code ${code}`));
+                    }
                 });
-
-                // Give it a moment to verify it didn't crash immediately?
-                // Or assume ready. Let's assume ready.
-                this.initialized = true;
-                resolve();
 
             } catch (error) {
                 reject(error);
@@ -76,7 +97,8 @@ class GeminiClient {
      */
     async sendPrompt(prompt) {
         if (!this.initialized || !this.process) {
-            throw new Error('GeminiClient not initialized');
+            console.log('[Gemini] Process not running, attempting to restart...');
+            await this.initialize();
         }
         if (this.isProcessing) {
             throw new Error('Client is busy processing another request');
