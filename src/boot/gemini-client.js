@@ -148,6 +148,7 @@ class GeminiClient {
                         if (json.models) {
                             const validModels = json.models
                                 .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
+                                .filter(m => !m.name.includes('vision') && !m.name.includes('image') && !m.name.includes('nano')) // Exclude vision, image, and nano models
                                 .map(m => ({
                                     name: m.name.replace('models/', ''),
                                     displayName: m.displayName || m.name.replace('models/', '')

@@ -93,6 +93,33 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models, c
         }
     };
 
+    const formatContent = (content: string) => {
+        if (content.startsWith('Error:')) {
+            // Check for GoogleGenerativeAI specific errors
+            if (content.includes('[GoogleGenerativeAI Error]')) {
+                const match = content.match(/\[(4\d{2}[^\]]*)\] (.*?)(?:\.|$)/);
+                if (match) {
+                    return `⚠️ API Error (${match[1]})\n${match[2]}`;
+                }
+                // Fallback for simple 429
+                if (content.includes('429')) return "⚠️ Quota Exceeded. Please try again later.";
+            }
+
+            try {
+                // Try to see if it contains a JSON error
+                const jsonPart = content.replace(/^Error:\s*/, '');
+                if (jsonPart.trim().startsWith('{')) {
+                    const parsed = JSON.parse(jsonPart);
+                    return parsed.message || parsed.error?.message || jsonPart;
+                }
+                return jsonPart;
+            } catch (e) {
+                return content.replace(/^Error:\s*/, '');
+            }
+        }
+        return content;
+    };
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
             <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
@@ -109,7 +136,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models, c
                             {msg.role === 'user' ? 'You' : (msg.content.startsWith('Error:') ? 'System Error' : 'Gemini')}
                         </strong>
                         <div style={{ whiteSpace: 'pre-wrap', marginTop: '0.5rem', lineHeight: '1.5' }}>
-                            {msg.content}
+                            {formatContent(msg.content)}
                         </div>
                         {msg.mcpCalls && msg.mcpCalls.length > 0 && (
                             <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: '#666' }}>
