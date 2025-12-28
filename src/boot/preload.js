@@ -10,7 +10,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // MCP Configuration
     mcpList: () => ipcRenderer.invoke('mcp:list'),
     mcpListTools: () => ipcRenderer.invoke('mcp:list-tools'),
-    mcpListResources: () => ipcRenderer.invoke('mcp:list-resources'),
     mcpListPrompts: () => ipcRenderer.invoke('mcp:list-prompts'),
     mcpGetPrompt: (serverName, promptName, args) => ipcRenderer.invoke('mcp:get-prompt', serverName, promptName, args),
     mcpAdd: (server) => ipcRenderer.invoke('mcp:add', server),

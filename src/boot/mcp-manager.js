@@ -151,27 +151,6 @@ class MCPServerManager {
     }
 
     /**
-     * Get all available resources from all connected servers
-     */
-    async getAllResources() {
-        const allResources = [];
-        for (const [name, client] of this.clients.entries()) {
-            try {
-                const result = await client.listResources();
-                const resources = result.resources.map(res => ({
-                    ...res,
-                    serverName: name
-                }));
-                allResources.push(...resources);
-            } catch (error) {
-                // Not all servers support resources, ignore specific errors
-                // console.error(`[MCP] Failed to list resources for ${name}:`, error);
-            }
-        }
-        return allResources;
-    }
-
-    /**
      * Get all available prompts from all connected servers
      */
     async getAllPrompts() {

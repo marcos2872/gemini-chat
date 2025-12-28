@@ -12,7 +12,6 @@ declare global {
             // MCP
             mcpList: () => Promise<any[]>;
             mcpListTools: () => Promise<any[]>;
-            mcpListResources: () => Promise<any[]>;
             mcpListPrompts: () => Promise<any[]>;
             mcpGetPrompt: (serverName: string, promptName: string, args?: any) => Promise<any>;
             mcpAdd: (server: any) => Promise<{ success: boolean; error?: string }>;

@@ -41,7 +41,6 @@ const CollapsibleSection = ({ title, count, children }: { title: string, count: 
 const MCPServerPanel: React.FC = () => {
     const [servers, setServers] = useState<MCPServer[]>([]);
     const [tools, setTools] = useState<any[]>([]);
-    const [resources, setResources] = useState<any[]>([]);
     const [prompts, setPrompts] = useState<any[]>([]);
     const [showModal, setShowModal] = useState(false);
     const [editingServer, setEditingServer] = useState<MCPServer | undefined>(undefined);
@@ -50,15 +49,12 @@ const MCPServerPanel: React.FC = () => {
         const list = await window.electronAPI.mcpList();
         setServers(list);
 
-        // Also load tools, resources, prompts
         try {
             const [t, p] = await Promise.all([
                 window.electronAPI.mcpListTools(),
-                // window.electronAPI.mcpListResources(),
                 window.electronAPI.mcpListPrompts()
             ]);
             setTools(t);
-            setResources([]);
             setPrompts(p);
         } catch (e) {
             console.error('Failed to load MCP capabilities', e);
@@ -141,7 +137,6 @@ const MCPServerPanel: React.FC = () => {
             <div style={{ flex: 1, overflowY: 'auto' }}>
                 {Array.isArray(servers) && servers.map(s => {
                     const serverTools = tools.filter(t => t.serverName === s.name);
-                    const serverResources = resources.filter(r => r.serverName === s.name);
                     const serverPrompts = prompts.filter(p => p.serverName === s.name);
                     const isEnabled = s.enabled !== false;
 

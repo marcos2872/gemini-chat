@@ -84,7 +84,6 @@ class GeminiClient {
 
             if (mcpManager) {
                 tools = await mcpManager.getAllTools();
-                // mcpResources = await mcpManager.getAllResources(); // Disabled as per user request
                 if (tools && tools.length > 0) {
                     geminiTools = this._mapToolsToGemini(tools);
                     // Re-initialize chat with tools if we have them
@@ -131,16 +130,9 @@ class GeminiClient {
                             }
 
                             let executionResult;
-                            /*
-                            if (call.name === 'read_mcp_resource') {
-                                console.log(`[Gemini] Reading resource: ${call.args.uri}`);
-                                executionResult = await mcpManager.readResource(call.args.uri);
-                            } else {
-                            */
+
                             executionResult = await mcpManager.callTool(call.name, call.args);
-                            /*
-                            }
-                            */
+
                             console.log(`[Gemini] Tool result for ${call.name}:`, executionResult);
 
                             // Construct FunctionResponse
