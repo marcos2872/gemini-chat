@@ -243,10 +243,28 @@ class MCPServerManager {
             await this._validateCommand(updates.command);
         }
 
+        const oldEnabled = servers[index].enabled;
+        const newEnabled = updates.enabled !== undefined ? updates.enabled : oldEnabled;
+
         servers[index] = { ...servers[index], ...updates };
         await this.saveServers(servers);
+
+        // Handle connection state change
+        if (oldEnabled && newEnabled === false) {
+            console.log(`[MCP] Disabling server ${name}, disconnecting...`);
+            if (this.clients.has(name)) {
+                // Try to close properly if we can, or just remove from maps
+                // SDK doesn't expose easy close on Client yet? 
+                // We will just remove references for now.
+                this.clients.delete(name);
+                this.transports.delete(name);
+            }
+        } else if ((!oldEnabled || !this.clients.has(name)) && newEnabled === true) {
+            console.log(`[MCP] Enabling server ${name}, connecting...`);
+            await this.connectToServer(servers[index]);
+        }
+
         console.log(`[MCP] Server "${name}" updated.`);
-        // Note: Reconnection would be needed for changes to take effect
     }
 
     async _validateCommand(command) {

@@ -62,17 +62,13 @@ const MCPServerPanel: React.FC = () => {
         loadServers();
     };
 
-    const testConnection = async (name: string) => {
+    const handleToggleEnabled = async (server: MCPServer) => {
         try {
-            const result = await window.electronAPI.mcpTest(name);
-            if (result.connected) {
-                // If we successfully connected/pinged, refresh state to show new status/tools
-                await loadServers();
-            } else {
-                alert(`Failed: ${result.error}`);
-            }
+            const newEnabled = !(server.enabled !== false);
+            await window.electronAPI.mcpUpdate(server.name, { enabled: newEnabled });
+            await loadServers(); // Reload to reflect connection status and tools
         } catch (e) {
-            alert(`Error: ${e}`);
+            alert(`Failed to toggle server: ${e}`);
         }
     };
 
@@ -86,11 +82,21 @@ const MCPServerPanel: React.FC = () => {
             <div style={{ flex: 1, overflowY: 'auto' }}>
                 {Array.isArray(servers) && servers.map(s => {
                     const serverTools = tools.filter(t => t.serverName === s.name);
+                    const isEnabled = s.enabled !== false;
+
                     return (
                         <div key={s.name} style={{ padding: '0.8rem', borderBottom: '1px solid #3E3E42' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', alignItems: 'center' }}>
                                 <strong>{s.name}</strong>
-                                <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: s.enabled !== false ? '#4CAF50' : '#666' }} title={s.enabled !== false ? 'Enabled' : 'Disabled'} />
+                                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '0.8rem' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={isEnabled}
+                                        onChange={() => handleToggleEnabled(s)}
+                                        style={{ marginRight: '5px' }}
+                                    />
+                                    {isEnabled ? 'On' : 'Off'}
+                                </label>
                             </div>
                             <div style={{ fontSize: '0.8rem', color: '#9DA5B4', marginBottom: '0.5rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                 {s.command || 'No Command'} {s.args?.join(' ')}
@@ -116,7 +122,6 @@ const MCPServerPanel: React.FC = () => {
                             )}
 
                             <div style={{ display: 'flex', gap: '5px' }}>
-                                <button onClick={() => testConnection(s.name)} style={{ fontSize: '0.7rem', padding: '2px 5px' }}>Ping</button>
                                 <button onClick={() => handleEditClick(s)} style={{ fontSize: '0.7rem', padding: '2px 5px' }}>Edit</button>
                                 <button onClick={() => handleDelete(s.name)} style={{ fontSize: '0.7rem', padding: '2px 5px', color: '#ff4444' }}>Del</button>
                             </div>
