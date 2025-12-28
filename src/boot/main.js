@@ -102,7 +102,10 @@ ipcMain.handle('gemini:prompt', async (event, prompt) => {
         };
         activeConversation.messages.push(userMsg);
 
-        const response = await gemini.sendPrompt(prompt);
+        // Connect MCP servers if not already connected (best effort)
+        await mcpManager.connectAll();
+
+        const response = await gemini.sendPrompt(prompt, mcpManager);
 
         // Add Assistant Message
         const assistantMsg = {
