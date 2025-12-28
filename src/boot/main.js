@@ -73,22 +73,6 @@ const mcpManager = new MCPServerManager();
 // State
 let activeConversation = storage.createConversation();
 
-// app.whenReady().then(async () => {
-//     log('Electron', 'Application starting...');
-
-//     try {
-//         await gemini.initialize();
-//         log('Gemini', 'Client initialized');
-//     } catch (err) {
-//         log('Gemini', `Initialization failed: ${err.message}`);
-//     }
-
-//     createWindow();
-
-//     app.on('activate', function () {
-//         if (BrowserWindow.getAllWindows().length === 0) createWindow();
-//     });
-// });
 
 app.on('window-all-closed', function () {
     log('Electron', 'All windows closed');

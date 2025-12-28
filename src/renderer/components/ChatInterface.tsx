@@ -155,24 +155,77 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models, c
         return content;
     };
 
+    const CollapsibleLog = ({ content }: { content: string }) => {
+        const [isExpanded, setIsExpanded] = useState(false);
+
+        let title = content;
+        let details = '';
+
+        if (content.includes('\nArgs:')) {
+            const parts = content.split('\nArgs:');
+            title = parts[0].trim();
+            details = parts[1].trim();
+        }
+
+        return (
+            <div style={{ textAlign: 'left', margin: '0.5rem 0' }}>
+                <div
+                    onClick={() => setIsExpanded(!isExpanded)}
+                    style={{
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '0.9rem',
+                        color: title.startsWith('✅') ? '#4CAF50' : '#f44336'
+                    }}
+                >
+                    <span style={{ marginRight: '0.5rem' }}>{isExpanded ? '▼' : '▶'}</span>
+                    {title}
+                </div>
+                {isExpanded && details && (
+                    <pre style={{
+                        marginTop: '0.5rem',
+                        backgroundColor: '#1E1E1E',
+                        padding: '0.5rem',
+                        borderRadius: '4px',
+                        fontSize: '0.8rem',
+                        overflowX: 'auto',
+                        textAlign: 'left'
+                    }}>
+                        {details}
+                    </pre>
+                )}
+            </div>
+        );
+    };
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', position: 'relative' }}>
             <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
                 {Array.isArray(messages) && messages.map((msg, idx) => (
                     <div key={idx} style={{
                         marginBottom: '1rem',
-                        alignSelf: msg.role === 'user' ? 'flex-end' : (msg.role === 'system' ? 'center' : 'flex-start'),
+                        alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
                         backgroundColor: msg.role === 'user' ? '#2b2b2b' : (
-                            msg.role === 'system' ? 'transparent' :
+                            msg.role === 'system' ? 'rgba(76, 175, 80, 0.1)' : // Light green tint for system? Or maybe just transparent
                                 (msg.content.startsWith('Error:') ? 'rgba(255, 0, 0, 0.1)' : 'transparent')
                         ),
-                        padding: msg.role === 'user' || msg.content.startsWith('Error:') ? '1rem' : '0',
+                        // For system messages, let's give them a subtle border or background to make them "look like a message"
+                        // but distinct. User said "like a chat message".
+                        // Assistant is transparent default (no bg). 
+                        // Let's make system messages have a slight background to distinguish, but left aligned.
+
+                        padding: msg.role === 'user' || msg.content.startsWith('Error:') || msg.role === 'system' ? '1rem' : '0',
+
                         borderRadius: '8px',
-                        border: msg.content.startsWith('Error:') ? '1px solid #700' : 'none',
+                        border: msg.content.startsWith('Error:') ? '1px solid #700' : (
+                            msg.role === 'system' ? '1px solid rgba(76, 175, 80, 0.3)' : 'none'
+                        ),
                         maxWidth: '80%',
-                        textAlign: msg.role === 'system' ? 'center' : 'left',
-                        fontStyle: msg.role === 'system' ? 'italic' : 'normal',
-                        opacity: msg.role === 'system' ? 0.7 : 1
+                        textAlign: 'left',
+                        fontStyle: 'normal',
+                        opacity: 1
                     }}>
                         {msg.role !== 'system' && (
                             <strong style={{ color: msg.role === 'user' ? '#4B90F5' : (msg.content.startsWith('Error:') ? '#ff6b6b' : '#9DA5B4') }}>
@@ -180,7 +233,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models, c
                             </strong>
                         )}
                         <div style={{ whiteSpace: 'pre-wrap', marginTop: msg.role === 'system' ? '0' : '0.5rem', lineHeight: '1.5' }}>
-                            {formatContent(msg.content)}
+                            {msg.role === 'system' && (msg.content.startsWith('✅') || msg.content.startsWith('❌')) ? (
+                                <CollapsibleLog content={msg.content} />
+                            ) : (
+                                formatContent(msg.content)
+                            )}
                         </div>
                         {msg.mcpCalls && msg.mcpCalls.length > 0 && (
                             <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: '#666' }}>
