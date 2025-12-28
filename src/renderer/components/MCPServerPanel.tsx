@@ -93,7 +93,7 @@ const MCPServerPanel: React.FC = () => {
                                 <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: s.enabled !== false ? '#4CAF50' : '#666' }} title={s.enabled !== false ? 'Enabled' : 'Disabled'} />
                             </div>
                             <div style={{ fontSize: '0.8rem', color: '#9DA5B4', marginBottom: '0.5rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {s.command}
+                                {s.command || 'No Command'} {s.args?.join(' ')}
                             </div>
 
                             {serverTools.length > 0 && (

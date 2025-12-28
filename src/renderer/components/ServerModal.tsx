@@ -14,18 +14,55 @@ interface ServerModalProps {
 }
 
 const ServerModal: React.FC<ServerModalProps> = ({ server, onClose, onSave }) => {
-    const [name, setName] = useState(server?.name || '');
-    const [command, setCommand] = useState(server?.command || '');
-    const [args, setArgs] = useState(server?.args?.join(' ') || '');
+    const [jsonContent, setJsonContent] = useState(() => {
+        if (server) {
+            const { name, ...rest } = server;
+            // Create the "Name": { ... } structure
+            const obj = { [name]: rest };
+            // Stringify but remove the outer braces to match user request "key": { val }
+            const json = JSON.stringify(obj, null, 2);
+            return json.substring(1, json.length - 1).trim();
+        }
+        return `"NewServer": {
+  "command": "",
+  "args": [],
+  "env": {},
+  "enabled": true
+}`;
+    });
+    const [error, setError] = useState<string | null>(null);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSave({
-            name,
-            command,
-            args: args.split(' ').filter(a => a.length > 0),
-            enabled: true
-        });
+        setError(null);
+
+        try {
+            // Wrap in braces to make it valid JSON object
+            const wrappedJson = `{${jsonContent}}`;
+            const parsed = JSON.parse(wrappedJson);
+
+            const keys = Object.keys(parsed);
+            if (keys.length !== 1) {
+                throw new Error("JSON must contain exactly one server key (e.g. \"MyServer\": { ... })");
+            }
+
+            const name = keys[0];
+            const details = parsed[name];
+
+            if (!details.command) {
+                throw new Error("Field 'command' is required.");
+            }
+
+            onSave({
+                name,
+                command: details.command,
+                args: details.args,
+                env: details.env,
+                enabled: details.enabled !== false
+            });
+        } catch (err: any) {
+            setError(err.message);
+        }
     };
 
     return (
@@ -36,41 +73,37 @@ const ServerModal: React.FC<ServerModalProps> = ({ server, onClose, onSave }) =>
         }}>
             <div style={{
                 backgroundColor: '#252526', padding: '1.5rem', borderRadius: '8px',
-                width: '400px', border: '1px solid #3E3E42'
+                width: '600px', border: '1px solid #3E3E42', display: 'flex', flexDirection: 'column', maxHeight: '90vh'
             }}>
-                <h3 style={{ marginTop: 0 }}>{server ? 'Edit Server' : 'Add Server'}</h3>
-                <form onSubmit={handleSubmit}>
-                    <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', marginBottom: '0.5rem' }}>Name</label>
-                        <input
+                <h3 style={{ marginTop: 0 }}>{server ? 'Edit Server (JSON)' : 'Add Server (JSON)'}</h3>
+                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                    <div style={{ marginBottom: '1rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                        <textarea
                             required
-                            value={name}
-                            onChange={e => setName(e.target.value)}
-                            style={{ width: '100%', padding: '0.5rem', backgroundColor: '#1E1E1E', border: '1px solid #3E3E42', color: 'white' }}
+                            value={jsonContent}
+                            onChange={e => setJsonContent(e.target.value)}
+                            style={{
+                                flex: 1,
+                                minHeight: '300px',
+                                padding: '0.5rem',
+                                backgroundColor: '#1E1E1E',
+                                border: '1px solid #3E3E42',
+                                color: '#D4D4D4',
+                                fontFamily: 'monospace',
+                                resize: 'vertical'
+                            }}
                         />
-                    </div>
-                    <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', marginBottom: '0.5rem' }}>Command (Executable)</label>
-                        <input
-                            required
-                            value={command}
-                            onChange={e => setCommand(e.target.value)}
-                            placeholder="e.g. npx, python3, /usr/bin/git"
-                            style={{ width: '100%', padding: '0.5rem', backgroundColor: '#1E1E1E', border: '1px solid #3E3E42', color: 'white' }}
-                        />
-                    </div>
-                    <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', marginBottom: '0.5rem' }}>Arguments (space separated)</label>
-                        <input
-                            value={args}
-                            onChange={e => setArgs(e.target.value)}
-                            placeholder="-y @modelcontextprotocol/server-filesystem"
-                            style={{ width: '100%', padding: '0.5rem', backgroundColor: '#1E1E1E', border: '1px solid #3E3E42', color: 'white' }}
-                        />
+                        {error && (
+                            <div style={{ color: '#ff6b6b', marginTop: '0.5rem', fontSize: '0.9rem' }}>
+                                Error: {error}
+                            </div>
+                        )}
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
                         <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: '#9DA5B4', cursor: 'pointer' }}>Cancel</button>
-                        <button type="submit" className="primary-btn">Save</button>
+                        <button type="submit" className="primary-btn" style={{
+                            padding: '6px 12px', backgroundColor: '#007acc', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'
+                        }}>Save</button>
                     </div>
                 </form>
             </div>
