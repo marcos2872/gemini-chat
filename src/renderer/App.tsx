@@ -21,24 +21,40 @@ const App: React.FC = () => {
     };
 
     useEffect(() => {
-        // Initialize with new conversation if none
-        handleNewConversation();
-
-        // Fetch models
-        window.electronAPI.listModels().then(fetchedModels => {
-            if (fetchedModels && fetchedModels.length > 0) {
-                console.log('Loaded models:', fetchedModels);
-                setModels(fetchedModels);
-                // Set default to first model if current is invalid or unset
-                // We also check if currentModel is in the list. If not, pick the first one.
-                const exists = fetchedModels.find(m => m.name === currentModel);
-                if (!exists) {
-                    const firstModel = fetchedModels[0].name;
-                    setCurrentModel(firstModel);
-                    window.electronAPI.setModel(firstModel);
+        const init = async () => {
+            // 1. Fetch models
+            try {
+                const fetchedModels = await window.electronAPI.listModels();
+                if (fetchedModels && fetchedModels.length > 0) {
+                    setModels(fetchedModels);
+                    const exists = fetchedModels.find(m => m.name === currentModel);
+                    if (!exists) {
+                        const firstModel = fetchedModels[0].name;
+                        setCurrentModel(firstModel);
+                        window.electronAPI.setModel(firstModel);
+                    }
                 }
+            } catch (err) {
+                console.error('Failed to list models:', err);
             }
-        }).catch(err => console.error('Failed to list models:', err));
+
+            // 2. Load recent conversation or create new
+            try {
+                const list = await window.electronAPI.conversationList();
+                if (list && list.length > 0) {
+                    // List is sorted by recent
+                    const recent = list[0];
+                    setCurrentConversationId(recent.id);
+                } else {
+                    await handleNewConversation();
+                }
+            } catch (err) {
+                console.error('Failed to load recent conversation:', err);
+                await handleNewConversation();
+            }
+        };
+
+        init();
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     return (
