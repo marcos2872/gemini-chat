@@ -8,6 +8,36 @@ interface MCPServer {
     enabled?: boolean;
 }
 
+const CollapsibleSection = ({ title, count, children }: { title: string, count: number, children: React.ReactNode }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    if (count === 0) return null;
+    return (
+        <div style={{ marginBottom: '0.5rem' }}>
+            <div
+                onClick={() => setIsOpen(!isOpen)}
+                style={{
+                    fontSize: '0.75rem',
+                    textTransform: 'uppercase',
+                    color: '#9DA5B4',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    marginBottom: '4px',
+                    userSelect: 'none'
+                }}
+            >
+                <span style={{ marginRight: '5px', fontSize: '0.6rem' }}>{isOpen ? '▼' : '▶'}</span>
+                {title} <span style={{ marginLeft: '4px', opacity: 0.6 }}>{count}</span>
+            </div>
+            {isOpen && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', paddingLeft: '8px' }}>
+                    {children}
+                </div>
+            )}
+        </div>
+    );
+};
+
 const MCPServerPanel: React.FC = () => {
     const [servers, setServers] = useState<MCPServer[]>([]);
     const [tools, setTools] = useState<any[]>([]);
@@ -112,70 +142,34 @@ const MCPServerPanel: React.FC = () => {
                                 {s.command || 'No Command'} {s.args?.join(' ')}
                             </div>
 
-                            {serverTools.length > 0 && (
-                                <div style={{ marginBottom: '0.5rem' }}>
-                                    <div style={{ fontSize: '0.7em', textTransform: 'uppercase', color: '#666', marginBottom: '2px' }}>Tools</div>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                        {serverTools.map(t => (
-                                            <span key={t.name} title={t.description} style={{
-                                                fontSize: '0.7rem',
-                                                backgroundColor: '#333',
-                                                padding: '2px 4px',
-                                                borderRadius: '3px',
-                                                border: '1px solid #444'
-                                            }}>
-                                                {t.originalName}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
+                            <CollapsibleSection title="Tools" count={serverTools.length}>
+                                {serverTools.map(t => (
+                                    <span key={t.name} title={t.description} style={{
+                                        fontSize: '0.7rem',
+                                        backgroundColor: '#333',
+                                        padding: '2px 4px',
+                                        borderRadius: '3px',
+                                        border: '1px solid #444'
+                                    }}>
+                                        {t.originalName}
+                                    </span>
+                                ))}
+                            </CollapsibleSection>
 
-                            {
-                                /* Disabled resources UI
-                                serverResources.length > 0 && (
-                                    <div style={{ marginBottom: '0.5rem' }}>
-                                        <div style={{ fontSize: '0.7em', textTransform: 'uppercase', color: '#666', marginBottom: '2px' }}>Resources</div>
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                            {serverResources.map((r, i) => (
-                                                <span key={i} title={r.uri} style={{
-                                                    fontSize: '0.7rem',
-                                                    backgroundColor: '#2D333B',
-                                                    padding: '2px 4px',
-                                                    borderRadius: '3px',
-                                                    border: '1px solid #444',
-                                                    color: '#A8CD76'
-                                                }}>
-                                                    {r.name}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )
-                                */
-                            }
-
-                            {
-                                serverPrompts.length > 0 && (
-                                    <div style={{ marginBottom: '0.5rem' }}>
-                                        <div style={{ fontSize: '0.7em', textTransform: 'uppercase', color: '#666', marginBottom: '2px' }}>Prompts</div>
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                            {serverPrompts.map((p, i) => (
-                                                <span key={i} title={p.description} style={{
-                                                    fontSize: '0.7rem',
-                                                    backgroundColor: '#3B2D3B',
-                                                    padding: '2px 4px',
-                                                    borderRadius: '3px',
-                                                    border: '1px solid #444',
-                                                    color: '#C586C0'
-                                                }}>
-                                                    {p.name}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )
-                            }
+                            <CollapsibleSection title="Prompts" count={serverPrompts.length}>
+                                {serverPrompts.map((p, i) => (
+                                    <span key={i} title={p.description} style={{
+                                        fontSize: '0.7rem',
+                                        backgroundColor: '#3B2D3B',
+                                        padding: '2px 4px',
+                                        borderRadius: '3px',
+                                        border: '1px solid #444',
+                                        color: '#C586C0'
+                                    }}>
+                                        {p.name}
+                                    </span>
+                                ))}
+                            </CollapsibleSection>
 
                             < div style={{ display: 'flex', gap: '5px' }}>
                                 <button onClick={() => handleEditClick(s)} style={{ fontSize: '0.7rem', padding: '2px 5px' }}>Edit</button>
