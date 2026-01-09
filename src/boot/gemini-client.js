@@ -198,28 +198,46 @@ class GeminiClient {
     }
 
     _sanitizeSchema(schema) {
-        if (!schema) {
-            return { type: 'OBJECT', properties: {} };
+        if (!schema || typeof schema !== 'object') {
+            return schema;
         }
 
-        // Deep clone to avoid mutating original
-        const clean = JSON.parse(JSON.stringify(schema));
+        // Deep clone to avoid mutating original if not already cloned
+        // But here we are processing a structure, let's just returns new objects or same if primitive
 
-        // Ensure type is OBJECT for root
-        if (!clean.type) {
+        const clean = { ...schema };
+
+        // Ensure type is OBJECT for root if missing, but primarily we want to clean specific fields
+        if (!clean.type && clean.properties) {
             clean.type = 'OBJECT';
         }
+        
+        // Capitalize types for Gemini (older API requirement, good practice)
+        if (clean.type && typeof clean.type === 'string') {
+            clean.type = clean.type.toUpperCase();
+        }
 
-        // Remove unsupported fields for Gemini Function Declarations
+        // Remove unsupported fields
         delete clean.$schema;
         delete clean.title;
-        delete clean.additionalProperties; // Gemini defaults to false/strict usually, strictly disallowed in some API versions
+        delete clean.additionalProperties;
+        delete clean.exclusiveMinimum;
+        delete clean.exclusiveMaximum;
+        delete clean.default; // Sometimes problematic depending on context
 
-        // Recursively clean properties if needed, ensuring types are strings
-        // For now, simple cleaning is often enough.
-        // Google Generative AI Node SDK expects 'type' to be capitalized often in older versions, 
-        // but let's try to trust the recent SDK handles standard JSON schema.
-        // However, we MUST ensure property keys are valid.
+        // Recursively clean 'properties'
+        if (clean.properties) {
+            const newProps = {};
+            for (const [key, value] of Object.entries(clean.properties)) {
+                newProps[key] = this._sanitizeSchema(value);
+            }
+            clean.properties = newProps;
+        }
+
+        // Recursively clean 'items' (for arrays)
+        if (clean.items) {
+            clean.items = this._sanitizeSchema(clean.items);
+        }
 
         return clean;
     }

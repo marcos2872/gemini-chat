@@ -2,9 +2,12 @@ import React, { useState } from 'react';
 
 interface MCPServer {
     name: string;
-    command: string;
+    command?: string;
     args?: string[];
     env?: Record<string, string>;
+    url?: string;
+    type?: 'stdio' | 'sse';
+    token?: string;
     enabled?: boolean;
 }
 
@@ -25,9 +28,12 @@ const ServerModal: React.FC<ServerModalProps> = ({ server, onClose, onSave }) =>
             return json.substring(1, json.length - 1).trim();
         }
         return `"NewServer": {
+  "type": "stdio",
   "command": "",
   "args": [],
   "env": {},
+  "url": "",
+  "token": "",
   "enabled": true
 }`;
     });
@@ -62,8 +68,10 @@ const ServerModal: React.FC<ServerModalProps> = ({ server, onClose, onSave }) =>
             const name = keys[0];
             const details = parsed[name];
 
-            if (!details.command) {
-                throw new Error("Field 'command' is required.");
+            if (details.type === 'sse') {
+                if (!details.url) throw new Error("Field 'url' is required for SSE.");
+            } else {
+                if (!details.command) throw new Error("Field 'command' is required for Stdio.");
             }
 
             onSave({
@@ -71,6 +79,9 @@ const ServerModal: React.FC<ServerModalProps> = ({ server, onClose, onSave }) =>
                 command: details.command,
                 args: details.args,
                 env: details.env,
+                url: details.url,
+                type: details.type || 'stdio',
+                token: details.token,
                 enabled: details.enabled !== false
             });
         } catch (err: any) {
@@ -87,12 +98,19 @@ const ServerModal: React.FC<ServerModalProps> = ({ server, onClose, onSave }) =>
             const name = Object.keys(parsed)[0];
             const details = parsed[name];
 
-            if (!details.command) throw new Error("Field 'command' is required.");
+            if (details.type === 'sse') {
+                if (!details.url) throw new Error("Field 'url' is required for SSE.");
+            } else {
+                if (!details.command) throw new Error("Field 'command' is required for Stdio.");
+            }
 
             const res = await window.electronAPI.mcpTestConfig({
                 command: details.command,
                 args: details.args,
-                env: details.env
+                env: details.env,
+                url: details.url,
+                type: details.type || 'stdio',
+                token: details.token
             });
 
             if (res.success && res.connected) {

@@ -3,9 +3,12 @@ import ServerModal from './ServerModal';
 
 interface MCPServer {
     name: string;
-    command: string;
+    command?: string;
     args?: string[];
     enabled?: boolean;
+    type?: 'stdio' | 'sse';
+    url?: string;
+    token?: string;
 }
 
 const CollapsibleSection = ({ title, count, children }: { title: string, count: number, children: React.ReactNode }) => {
@@ -155,9 +158,12 @@ const MCPServerPanel: React.FC = () => {
                                 </label>
                             </div>
                             <div style={{ fontSize: '0.8rem', color: '#9DA5B4', marginBottom: '0.5rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {s.command || 'No Command'} {s.args?.join(' ')}
+                                {s.type === 'sse' ? (
+                                    <span title={s.url}>SSE: {s.url}</span>
+                                ) : (
+                                    <span title={s.command}>{s.command || 'No Command'} {s.args?.join(' ')}</span>
+                                )}
                             </div>
-
                             <CollapsibleSection title="Tools" count={serverTools.length}>
                                 {serverTools.map(t => (
                                     <span key={t.name} title={t.description} style={{
