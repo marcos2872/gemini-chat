@@ -13,18 +13,18 @@ class CopilotAuthService {
     async requestDeviceCode(clientId) {
         try {
             const res = await axios.post(
-                `${GITHUB_AUTH_URL}/device/code`,
+                `https://github.com/login/device/code?client_id=${clientId}`,
                 {
-                    client_id: clientId,
-                    scope: "read:user", // Standard scope for device flow
-                },
-                {
-                    headers: { Accept: "application/json" },
+                    headers: { 
+                        "Accept": "application/json",
+                        "User-Agent": "Gemini-Chat-Desktop/1.0" 
+                    },
                 }
             );
             return res.data;
         } catch (error) {
             console.error('[CopilotAuthService] Request Code Error:', error.message);
+            console.log('Payload:', { client_id: clientId }); 
             if (error.response) {
                 console.error('Response data:', error.response.data);
                 throw new Error(error.response.data.error_description || error.response.data.error || 'Failed to request device code');
@@ -53,13 +53,17 @@ class CopilotAuthService {
                 try {
                     const res = await axios.post(
                         `${GITHUB_AUTH_URL}/access_token`,
-                        {
+                        new URLSearchParams({
                             client_id: clientId,
                             device_code: deviceCode,
                             grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-                        },
+                        }).toString(),
                         {
-                            headers: { Accept: "application/json" },
+                            headers: { 
+                                "Accept": "application/json",
+                                "Content-Type": "application/x-www-form-urlencoded",
+                                "User-Agent": "Gemini-Chat-Desktop/1.0"
+                            },
                         }
                     );
 
