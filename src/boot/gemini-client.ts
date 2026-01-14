@@ -1,5 +1,8 @@
-require('dotenv').config();
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+import * as dotenv from 'dotenv';
+import { GoogleGenerativeAI, ChatSession, GenerativeModel } from '@google/generative-ai';
+import * as https from 'https';
+
+dotenv.config();
 
 /**
  * @typedef {Object} Message
@@ -8,11 +11,19 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
  * @property {string} timestamp - ISO string of the time
  */
 
-class GeminiClient {
+export class GeminiClient {
+    private configPath: string | undefined;
+    private apiKey: string | undefined;
+    public modelName: string;
+    private genAI: GoogleGenerativeAI | null;
+    private model: GenerativeModel | null;
+    private chat: ChatSession | null;
+    private history: any[];
+
     /**
      * @param {string} [configPath] - Path to config file (optional)
      */
-    constructor(configPath) {
+    constructor(configPath?: string) {
         this.configPath = configPath;
         this.apiKey = process.env.GEMINI_API_KEY;
         this.modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
@@ -26,7 +37,7 @@ class GeminiClient {
      * Initialize the Gemini SDK.
      * @returns {Promise<void>}
      */
-    async initialize(apiKey = null) {
+    async initialize(apiKey: string | null = null) {
         if (apiKey) {
             this.apiKey = apiKey;
         } else if (!this.apiKey) {
@@ -54,7 +65,7 @@ class GeminiClient {
         }
     }
 
-    async setApiKey(key) {
+    async setApiKey(key: string) {
         this.apiKey = key;
         await this.initialize(key);
     }
@@ -85,7 +96,7 @@ class GeminiClient {
      * @param {Function} [onApproval] - Async callback (toolName, args) => Promise<boolean>
      * @returns {Promise<string>}
      */
-    async sendPrompt(prompt, mcpManager, onApproval) {
+    async sendPrompt(prompt: string, mcpManager: any, onApproval: any) {
         if (!this.genAI || !this.chat) {
             this.apiKey = process.env.GEMINI_API_KEY;
             if (this.apiKey) {
@@ -95,11 +106,14 @@ class GeminiClient {
             }
         }
 
+        // Check if chat is still null after possible init
+        if (!this.chat || !this.model || !this.genAI) throw new Error("Gemini Client failed to initialize");
+
         this._addToHistory('user', prompt);
 
         try {
-            let tools = [];
-            let geminiTools = [];
+            let tools: any[] = [];
+            let geminiTools: any[] = [];
 
             if (mcpManager) {
                 tools = await mcpManager.getAllTools();
@@ -121,7 +135,7 @@ class GeminiClient {
 
             console.log(`[Gemini] Sending prompt with ${tools.length} tools...`);
 
-            let result = await this._callWithRetry(() => this.chat.sendMessage(prompt));
+            let result = await this._callWithRetry(() => this.chat!.sendMessage(prompt));
             let response = result.response;
             let text = response.text();
 
@@ -136,7 +150,7 @@ class GeminiClient {
                 if (functionCalls && functionCalls.length > 0) {
                     console.log('[Gemini] Model requested function calls:', JSON.stringify(functionCalls));
 
-                    const toolParts = [];
+                    const toolParts: any[] = [];
                     for (const call of functionCalls) {
                         try {
                             // Check for approval before executing the tool
@@ -161,7 +175,7 @@ class GeminiClient {
                                     response: { result: executionResult }
                                 }
                             });
-                        } catch (err) {
+                        } catch (err: any) {
                             console.error(`[Gemini] Tool execution failed for ${call.name}:`, err);
                             toolParts.push({
                                 functionResponse: {
@@ -174,7 +188,10 @@ class GeminiClient {
 
                     // Send tool results back to model
                     console.log('[Gemini] Sending tool outputs to model...');
-                    result = await this._callWithRetry(() => this.chat.sendMessage(toolParts));
+                    // Ensure chat is valid
+                    if (!this.chat) throw new Error("Chat session lost");
+
+                    result = await this._callWithRetry(() => this.chat!.sendMessage(toolParts));
                     response = result.response;
                     text = response.text();
                     turn++;
@@ -196,13 +213,13 @@ class GeminiClient {
     /**
      * Retry helper for API calls (handling 429s)
      */
-    async _callWithRetry(fn, retries = 3, delay = 2000) {
+    async _callWithRetry(fn: () => Promise<any>, retries = 3, delay = 2000) {
         let attempt = 0;
         while (attempt < retries) {
             try {
                 return await fn();
-            } catch (error) {
-                const isQuotaError = error.message.includes('429') || error.message.includes('Quota exceeded');
+            } catch (error: any) {
+                const isQuotaError = error.message && (error.message.includes('429') || error.message.includes('Quota exceeded'));
                 if (isQuotaError && attempt < retries - 1) {
                     // Extract retry delay if possible, or backoff
                     console.warn(`[Gemini] Rate limit hit (429). Retrying in ${delay}ms... (Attempt ${attempt + 1}/${retries})`);
@@ -219,27 +236,24 @@ class GeminiClient {
     /**
      * Map MCP tools to Gemini format
      */
-    /**
-     * Map MCP tools to Gemini format
-     */
-    _mapToolsToGemini(mcpTools) {
+    _mapToolsToGemini(mcpTools: any[]) {
         return [{
             functionDeclarations: mcpTools.map(tool => ({
                 name: this._sanitizeName(tool.name),
                 description: tool.description || `Tool ${tool.name}`,
                 parameters: this._sanitizeSchema(tool.inputSchema)
             }))
-        }];
+        } as any]; // Force any because Gemini types might be strict about tool structure
     }
 
-    _sanitizeName(name) {
+    _sanitizeName(name: string) {
         // Gemini names: ^[a-zA-Z0-9_-]+$
         // Our namespaced names use __ which is valid (underscores).
         // Just ensure no other chars.
         return name.replace(/[^a-zA-Z0-9_-]/g, '_');
     }
 
-    _sanitizeSchema(schema) {
+    _sanitizeSchema(schema: any): any {
         if (!schema || typeof schema !== 'object') {
             return schema;
         }
@@ -269,7 +283,7 @@ class GeminiClient {
 
         // Recursively clean 'properties'
         if (clean.properties) {
-            const newProps = {};
+            const newProps: any = {};
             for (const [key, value] of Object.entries(clean.properties)) {
                 newProps[key] = this._sanitizeSchema(value);
             }
@@ -284,7 +298,7 @@ class GeminiClient {
         return clean;
     }
 
-    _addToHistory(role, content) {
+    _addToHistory(role: string, content: string) {
         const msg = {
             role,
             content,
@@ -313,7 +327,7 @@ class GeminiClient {
      * Set the current model and reset the session.
      * @param {string} modelName
      */
-    async setModel(modelName) {
+    async setModel(modelName: string) {
         console.log(`[Gemini] Switching model to: ${modelName}`);
         this.modelName = modelName;
         await this.initialize();
@@ -323,11 +337,10 @@ class GeminiClient {
      * List available models using the REST API.
      * @returns {Promise<Array<{name: string, displayName: string}>>}
      */
-    async listModels() {
+    async listModels(): Promise<Array<{ name: string, displayName: string }>> {
         if (!this.apiKey) return [];
 
         return new Promise((resolve, reject) => {
-            const https = require('https');
             const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${this.apiKey}`;
 
             https.get(url, (res) => {
@@ -346,12 +359,12 @@ class GeminiClient {
                             ];
 
                             const validModels = json.models
-                                .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
-                                .map(m => ({
+                                .filter((m: any) => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
+                                .map((m: any) => ({
                                     name: m.name.replace('models/', ''),
                                     displayName: m.displayName || m.name.replace('models/', '')
                                 }))
-                                .filter(m => allowedModels.includes(m.name));
+                                .filter((m: any) => allowedModels.includes(m.name));
                             resolve(validModels);
                         } else {
                             console.warn('[Gemini] Unexpected response listing models:', json);
@@ -370,4 +383,3 @@ class GeminiClient {
     }
 }
 
-module.exports = GeminiClient;

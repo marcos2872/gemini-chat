@@ -16,7 +16,12 @@ const DEFAULT_HEADERS = {
  * @property {string} timestamp - ISO string of the time
  */
 
-class CopilotClient {
+export class CopilotClient {
+    private accessToken: string | null;
+    public modelName: string;
+    public history: any[]; // Made public or accessor used? getHistory() exists.
+    private timeoutMs: number;
+
     constructor() {
         this.accessToken = null;
         this.modelName = 'gpt-4o'; // Default to a standard model
@@ -24,12 +29,12 @@ class CopilotClient {
         this.timeoutMs = 30000;
     }
 
-    initialize(accessToken) {
+    initialize(accessToken: string) {
         this.accessToken = accessToken;
         console.log(`[Copilot] Initialized with model: ${this.modelName}`);
     }
 
-    async setApiKey(key) {
+    async setApiKey(key: string) {
         this.initialize(key);
     }
 
@@ -57,7 +62,7 @@ class CopilotClient {
 
             clearTimeout(timeoutId);
             return response.ok;
-        } catch (error) {
+        } catch (error: any) {
             console.error("[CopilotClient] Connection check failed:", error.message);
             return false;
         }
@@ -67,7 +72,7 @@ class CopilotClient {
      * Set the current model.
      * @param {string} modelName
      */
-    async setModel(modelName) {
+    async setModel(modelName: string) {
         console.log(`[Copilot] Switching model to: ${modelName}`);
         this.modelName = modelName;
     }
@@ -106,13 +111,13 @@ class CopilotClient {
             const data = await response.json();
 
             if (Array.isArray(data)) {
-                return data.map(m => ({
+                return data.map((m: any) => ({
                     name: m.id || m.name,
                     displayName: m.name || m.id
                 }));
             }
             return [];
-        } catch (error) {
+        } catch (error: any) {
             console.warn("[CopilotClient] Failed to fetch models:", error.message);
             return [];
         }
@@ -125,20 +130,20 @@ class CopilotClient {
      * @param {Function} [onApproval] - Ignored for now
      * @returns {Promise<string>}
      */
-    async sendPrompt(prompt, mcpManager, onApproval) {
+    async sendPrompt(prompt: string, mcpManager: any, onApproval: any) {
         if (!this.accessToken) throw new Error("Not authenticated");
 
         this._addToHistory('user', prompt);
 
         // Prepare messages from history
-        let messages = this.history.map(m => ({
+        let messages: any[] = this.history.map(m => ({
             role: m.role,
             content: m.content
         }));
 
         // Handle Tools
-        let tools = [];
-        let openAITools = [];
+        let tools: any[] = [];
+        let openAITools: any[] = [];
 
         if (mcpManager) {
             tools = await mcpManager.getAllTools();
@@ -153,7 +158,7 @@ class CopilotClient {
         while (turn < maxTurns) {
             try {
                 console.log(`[Copilot] Sending prompt to ${this.modelName} (Turn ${turn + 1})...`);
-                const payload = {
+                const payload: any = {
                     messages: messages,
                     model: this.modelName,
                     stream: false
@@ -228,7 +233,7 @@ class CopilotClient {
                             let result;
                             try {
                                 result = await mcpManager.callTool(functionName, args);
-                            } catch (err) {
+                            } catch (err: any) {
                                 result = { error: err.message };
                             }
 
@@ -257,7 +262,7 @@ class CopilotClient {
                     throw new Error("No content in response");
                 }
 
-            } catch (error) {
+            } catch (error: any) {
                 console.error("[CopilotClient] Chat request failed:", error.message);
                 throw error;
             }
@@ -266,7 +271,7 @@ class CopilotClient {
         throw new Error("Max conversation turns reached.");
     }
 
-    _mapToolsToOpenAI(mcpTools) {
+    _mapToolsToOpenAI(mcpTools: any[]) {
         return mcpTools.map(tool => ({
             type: "function",
             function: {
@@ -277,7 +282,7 @@ class CopilotClient {
         }));
     }
 
-    _addToHistory(role, content) {
+    _addToHistory(role: string, content: string) {
         const msg = {
             role,
             content,
@@ -291,5 +296,3 @@ class CopilotClient {
         return this.history;
     }
 }
-
-module.exports = CopilotClient;

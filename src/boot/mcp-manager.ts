@@ -1,18 +1,21 @@
-const fs = require('fs').promises;
-const path = require('path');
-const os = require('os');
-const { execFile, exec } = require('child_process');
-const util = require('util');
-const { Client } = require("@modelcontextprotocol/sdk/client/index.js");
-const { StdioClientTransport } = require("@modelcontextprotocol/sdk/client/stdio.js");
-const { SSEClientTransport } = require("@modelcontextprotocol/sdk/client/sse.js");
+import { promises as fs } from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import { execFile, exec } from 'child_process';
+import * as util from 'util';
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { URL } from 'url';
 
 const execFilePromise = util.promisify(execFile);
 const execPromise = util.promisify(exec);
 
 // Simple Auth Provider for static tokens
 class SimpleAuthProvider {
-    constructor(token) {
+    private token: string;
+
+    constructor(token: string) {
         this.token = token;
     }
 
@@ -32,22 +35,26 @@ class SimpleAuthProvider {
     async codeVerifier() { return ''; }
 }
 
-/**
- * @typedef {Object} MCPServer
- * @property {string} name
- * @property {string} command
- * @property {string[]} [args]
- * @property {Record<string, string>} [env]
- * @property {boolean} [enabled]
- */
+interface MCPServer {
+    name: string;
+    command?: string;
+    args?: string[];
+    env?: Record<string, string>;
+    enabled?: boolean;
+    type?: 'stdio' | 'sse';
+    url?: string;
+    token?: string;
+}
 
-class MCPServerManager {
+export class MCPServerManager {
+    private configPath: string;
+    private clients: Map<string, Client>;
+    private transports: Map<string, StdioClientTransport | SSEClientTransport>;
+
     constructor() {
         this.configPath = path.join(os.homedir(), '.gemini-desktop', 'settings.json');
         this.ensureConfigDir();
-        /** @type {Map<string, Client>} */
         this.clients = new Map();
-        /** @type {Map<string, StdioClientTransport>} */
         this.transports = new Map();
     }
 
@@ -64,17 +71,17 @@ class MCPServerManager {
      * Load servers from config file.
      * @returns {Promise<MCPServer[]>}
      */
-    async loadServers() {
+    async loadServers(): Promise<MCPServer[]> {
         try {
             await this.ensureConfigDir();
             const content = await fs.readFile(this.configPath, 'utf8');
             const config = JSON.parse(content);
-            return config.mcpServers.map(server => {
+            return config.mcpServers.map((server: any) => {
                 const name = Object.keys(server)[0];
                 const value = server[name];
                 return { name, ...value };
             });
-        } catch (error) {
+        } catch (error: any) {
             if (error.code === 'ENOENT') {
                 const defaultConfig = { mcpServers: [] };
                 await this.saveConfig(defaultConfig);
@@ -85,11 +92,11 @@ class MCPServerManager {
         }
     }
 
-    async saveConfig(config) {
+    async saveConfig(config: any) {
         await fs.writeFile(this.configPath, JSON.stringify(config, null, 2));
     }
 
-    async saveServers(servers) {
+    async saveServers(servers: MCPServer[]) {
         const config = {
             mcpServers: servers.map(s => ({
                 [s.name]: {
@@ -110,26 +117,27 @@ class MCPServerManager {
      * Start connection to a specific server
      * @param {MCPServer} server
      */
-    async connectToServer(server) {
-        if (!server.enabled) return;
+    async connectToServer(server: MCPServer) {
+        if (server.enabled === false) return; // Explicitly checked for false, though undefined usually implies true? Logic in addServer says enabled default true.
         if (this.clients.has(server.name)) return; // Already connected
 
         console.log(`[MCP] Connecting to ${server.name}...`);
 
         try {
-            let transport;
+            let transport: StdioClientTransport | SSEClientTransport;
             if (server.type === 'sse') {
-                const opts = {};
+                const opts: any = {};
                 console.log(server)
                 if (server.token) {
                     opts.authProvider = new SimpleAuthProvider(server.token);
                 }
+                if (!server.url) throw new Error("URL missing for SSE");
                 transport = new SSEClientTransport(new URL(server.url), opts);
             } else {
                 transport = new StdioClientTransport({
-                    command: server.command,
+                    command: server.command!,
                     args: server.args || [],
-                    env: { ...process.env, ...(server.env || {}) }
+                    env: { ...process.env, ...(server.env || {}) } as Record<string, string>
                 });
             }
 
@@ -140,7 +148,7 @@ class MCPServerManager {
                 },
                 {
                     capabilities: {
-                        tools: {},
+                        sampling: {},
                     },
                 }
             );
@@ -177,7 +185,7 @@ class MCPServerManager {
                     // For now, let's just overwrite or ignore. Since we iterate servers, 
                     // a server shouldn't declare duplicate tool names itself (MCP spec says names must be unique per server).
                     // So we only worry about collisions if the SAME client instance was added twice or logic is flawed.
-                    
+
                     if (!uniqueTools.has(uniqueName)) {
                         uniqueTools.set(uniqueName, {
                             ...tool,
@@ -221,7 +229,7 @@ class MCPServerManager {
      * @param {string} promptName 
      * @param {Object} args 
      */
-    async getPrompt(serverName, promptName, args = {}) {
+    async getPrompt(serverName: string, promptName: string, args: any = {}) {
         const client = this.clients.get(serverName);
         if (!client) throw new Error(`Server ${serverName} is not connected.`);
 
@@ -235,7 +243,7 @@ class MCPServerManager {
     /**
      * Exec tool call
      */
-    async callTool(namespacedToolName, args) {
+    async callTool(namespacedToolName: string, args: any) {
         // Parse server name from namespaced tool name (server__tool)
         const parts = namespacedToolName.split('__');
         if (parts.length < 2) throw new Error(`Invalid tool name format: ${namespacedToolName}`);
@@ -257,7 +265,7 @@ class MCPServerManager {
      * Helper to add a new server.
      * @param {MCPServer} server 
      */
-    async addServer(server) {
+    async addServer(server: MCPServer) {
         const servers = await this.loadServers();
 
         // Validation
@@ -299,7 +307,7 @@ class MCPServerManager {
         await this.connectToServer(server);
     }
 
-    async removeServer(name) {
+    async removeServer(name: string) {
         const servers = await this.loadServers();
         const filtered = servers.filter(s => s.name !== name);
         if (filtered.length === servers.length) {
@@ -318,7 +326,7 @@ class MCPServerManager {
         console.log(`[MCP] Server "${name}" removed.`);
     }
 
-    async editServer(name, updates) {
+    async editServer(name: string, updates: Partial<MCPServer>) {
         const servers = await this.loadServers();
         const index = servers.findIndex(s => s.name === name);
         if (index === -1) {
@@ -360,7 +368,7 @@ class MCPServerManager {
         console.log(`[MCP] Server "${name}" updated.`);
     }
 
-    async _validateCommand(command) {
+    async _validateCommand(command: string) {
         // If absolute path
         if (path.isAbsolute(command)) {
             try {
@@ -384,7 +392,7 @@ class MCPServerManager {
      * @param {string} name 
      * @returns {Promise<boolean>}
      */
-    async testConnection(name) {
+    async testConnection(name: string) {
         let client = this.clients.get(name);
 
         if (!client) {
@@ -418,16 +426,12 @@ class MCPServerManager {
      * @param {Object} config - { command, args, env }
      * @returns {Promise<boolean>}
      */
-    async testServerConfig(config) {
-        const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio.js');
-        const { SSEClientTransport } = require('@modelcontextprotocol/sdk/client/sse.js');
-        const { Client } = require('@modelcontextprotocol/sdk/client/index.js');
-
-        let transport;
+    async testServerConfig(config: MCPServer) {
+        let transport: StdioClientTransport | SSEClientTransport;
         if (config.type === 'sse') {
             if (!config.url) throw new Error('URL is required');
 
-            const opts = {};
+            const opts: any = {};
             if (config.token) {
                 console.log(`[MCP] Test config using token via AuthProvider`);
                 opts.authProvider = new SimpleAuthProvider(config.token);
@@ -441,13 +445,13 @@ class MCPServerManager {
             transport = new StdioClientTransport({
                 command: config.command,
                 args: config.args || [],
-                env: { ...process.env, ...(config.env || {}) }
+                env: { ...process.env, ...(config.env || {}) } as Record<string, string>
             });
         }
 
         const client = new Client(
             { name: "gemini-desktop-test", version: "1.0.0" },
-            { capabilities: { tools: {} } }
+            { capabilities: { sampling: {} } }
         );
 
         try {
@@ -465,4 +469,3 @@ class MCPServerManager {
     }
 }
 
-module.exports = MCPServerManager;

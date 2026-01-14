@@ -1,13 +1,21 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
-const path = require('path');
+import { app, BrowserWindow, ipcMain, shell, IpcMainEvent } from 'electron';
+import * as path from 'path';
+import * as crypto from 'crypto';
+import { GeminiClient } from './gemini-client';
+import { ConversationStorage } from './conversation-storage';
+import { MCPServerManager } from './mcp-manager';
+import { CopilotAuthService } from './copilot-auth-service';
+import { CopilotClient } from './copilot-client';
 
 // Logging utility with prefix
-const log = (scope, message) => {
+const log = (scope: string, message: string) => {
     console.log(`[${scope}] ${message}`);
 };
 
+let mainWindow: BrowserWindow | null = null;
+
 function createWindow() {
-    const mainWindow = new BrowserWindow({
+    mainWindow = new BrowserWindow({
         width: 1200,
         height: 800,
         backgroundColor: '#1E1E1E', // Dark background for premium feel
@@ -28,8 +36,6 @@ function createWindow() {
     }
 }
 
-const GeminiClient = require('./gemini-client');
-
 // Initialize Gemini Client
 const gemini = new GeminiClient();
 
@@ -39,8 +45,8 @@ app.whenReady().then(async () => {
     // Load key from store if available
     try {
         const { default: Store } = await import('electron-store');
-        const store = new Store();
-        const savedKey = store.get('gemini_api_key');
+        const store = new Store() as any;
+        const savedKey = store.get('gemini_api_key') as string;
         if (savedKey) {
             log('Gemini', 'Found saved API Key in storage.');
             await gemini.initialize(savedKey);
@@ -48,7 +54,7 @@ app.whenReady().then(async () => {
             await gemini.initialize(); // Fallback to env
         }
         log('Gemini', 'Client initialized');
-    } catch (err) {
+    } catch (err: any) {
         log('Gemini', `Initialization failed: ${err.message}`);
     }
 
@@ -73,27 +79,17 @@ app.on('window-all-closed', function () {
     if (process.platform !== 'darwin') app.quit();
 });
 
-const ConversationStorage = require('./conversation-storage');
 const storage = new ConversationStorage();
-
-const MCPServerManager = require('./mcp-manager');
 const mcpManager = new MCPServerManager();
 
 // State
-let activeConversation = storage.createConversation();
-
-
-app.on('window-all-closed', function () {
-    log('Electron', 'All windows closed');
-    gemini.shutdown();
-    if (process.platform !== 'darwin') app.quit();
-});
+let activeConversation: any = storage.createConversation();
 
 // IPC Handlers
 ipcMain.handle('ping', () => 'pong');
 
 // Gemini Handlers
-ipcMain.handle('gemini:prompt', async (event, prompt) => {
+ipcMain.handle('gemini:prompt', async (event, prompt: string) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     try {
         log('IPC', `Received prompt: ${prompt.substring(0, 50)}...`);
@@ -115,7 +111,7 @@ ipcMain.handle('gemini:prompt', async (event, prompt) => {
         // Connect MCP servers if not already connected (best effort)
         await mcpManager.connectAll();
 
-        const response = await gemini.sendPrompt(prompt, mcpManager, async (toolName, args) => {
+        const response = await gemini.sendPrompt(prompt, mcpManager, async (toolName: string, args: any) => {
             // Approval Callback
             return new Promise((resolve) => {
                 const win = BrowserWindow.getAllWindows()[0];
@@ -144,7 +140,7 @@ ipcMain.handle('gemini:prompt', async (event, prompt) => {
                     activeConversation.messages.push(statusMsg);
 
                     // Save conversation immediately to persist the decision
-                    storage.saveConversation(activeConversation).catch(err => log('IPC', `Error saving intermediate state: ${err.message}`));
+                    storage.saveConversation(activeConversation).catch((err: any) => log('IPC', `Error saving intermediate state: ${err.message}`));
 
                     // Send real-time update to renderer
                     const win = BrowserWindow.getAllWindows()[0];
@@ -180,7 +176,7 @@ ipcMain.handle('gemini:prompt', async (event, prompt) => {
         }
 
         return { success: true, data: response, conversationId: activeConversation.id };
-    } catch (err) {
+    } catch (err: any) {
         log('IPC', `Error processing prompt: ${err.message}`);
 
         // Add Error Message to History
@@ -211,7 +207,7 @@ ipcMain.handle('gemini:prompt', async (event, prompt) => {
     }
 });
 
-ipcMain.handle('gemini:set-model', async (event, modelName) => {
+ipcMain.handle('gemini:set-model', async (event, modelName: string) => {
     try {
         if (modelName.startsWith('gemini') || modelName.startsWith('learnlm')) {
             await gemini.setModel(modelName);
@@ -220,7 +216,7 @@ ipcMain.handle('gemini:set-model', async (event, modelName) => {
             await copilotClient.setModel(modelName);
         }
         return { success: true };
-    } catch (err) {
+    } catch (err: any) {
         log('IPC', `Error setting model: ${err.message}`);
         return { success: false, error: err.message };
     }
@@ -232,16 +228,16 @@ ipcMain.handle('gemini:list-models', async () => {
 
 ipcMain.handle('gemini:history', () => gemini.getHistory()); // Raw client history, distinct from conversation storage
 
-ipcMain.handle('gemini:set-key', async (event, key) => {
+ipcMain.handle('gemini:set-key', async (event, key: string) => {
     try {
         const { default: Store } = await import('electron-store');
-        const store = new Store();
+        const store = new Store() as any;
         store.set('gemini_api_key', key);
 
         await gemini.setApiKey(key);
         const valid = await gemini.validateConnection();
         return { success: valid, valid };
-    } catch (err) {
+    } catch (err: any) {
         return { success: false, error: err.message };
     }
 });
@@ -252,13 +248,13 @@ ipcMain.handle('gemini:check-connection', async () => {
         if (!configured) return { success: true, connected: false };
         const valid = await gemini.validateConnection();
         return { success: true, connected: valid };
-    } catch (err) {
+    } catch (err: any) {
         return { success: false, error: err.message };
     }
 });
 
 // Conversation Management Handlers
-ipcMain.handle('conversation:new', async (event, options = {}) => {
+ipcMain.handle('conversation:new', async (event, options: any = {}) => {
     activeConversation = storage.createConversation();
     if (options && options.model) {
         activeConversation.model = options.model;
@@ -267,7 +263,7 @@ ipcMain.handle('conversation:new', async (event, options = {}) => {
     return activeConversation;
 });
 
-ipcMain.handle('conversation:load', async (event, id) => {
+ipcMain.handle('conversation:load', async (event, id: string) => {
     try {
         activeConversation = await storage.loadConversation(id);
         // Note: We might need to sync this state with GeminiClient if we want to restore context in the LLM.
@@ -279,15 +275,15 @@ ipcMain.handle('conversation:load', async (event, id) => {
 });
 
 ipcMain.handle('conversation:list', async () => storage.listConversations());
-ipcMain.handle('conversation:delete', async (event, id) => storage.deleteConversation(id));
-ipcMain.handle('conversation:export', async (event, id, format) => storage.exportConversation(id, format));
+ipcMain.handle('conversation:delete', async (event, id: string) => storage.deleteConversation(id));
+ipcMain.handle('conversation:export', async (event, id: string, format: string) => storage.exportConversation(id, format));
 
-ipcMain.handle('conversation:sync', async (event, conversation) => {
+ipcMain.handle('conversation:sync', async (event, conversation: any) => {
     try {
         activeConversation = conversation;
         await storage.saveConversation(activeConversation);
         return { success: true };
-    } catch (err) {
+    } catch (err: any) {
         log('IPC', `Error syncing conversation: ${err.message}`);
         return { success: false, error: err.message };
     }
@@ -298,7 +294,7 @@ ipcMain.handle('conversation:sync', async (event, conversation) => {
 ipcMain.handle('mcp:list', async () => {
     try {
         return await mcpManager.loadServers();
-    } catch (err) {
+    } catch (err: any) {
         log('MCP', `Error listing servers: ${err.message}`);
         return [];
     }
@@ -306,109 +302,106 @@ ipcMain.handle('mcp:list', async () => {
 
 ipcMain.handle('mcp:list-tools', async () => mcpManager.getAllTools());
 ipcMain.handle('mcp:list-prompts', async () => mcpManager.getAllPrompts());
-ipcMain.handle('mcp:get-prompt', async (event, serverName, promptName, args) => {
+ipcMain.handle('mcp:get-prompt', async (event, serverName: string, promptName: string, args: any) => {
     try {
         return await mcpManager.getPrompt(serverName, promptName, args);
-    } catch (err) {
+    } catch (err: any) {
         log('MCP', `Error getting prompt ${promptName} from ${serverName}: ${err.message}`);
         throw err;
     }
 });
 
-ipcMain.handle('mcp:add', async (event, server) => {
+ipcMain.handle('mcp:add', async (event, server: any) => {
     try {
         await mcpManager.addServer(server);
         return { success: true };
-    } catch (err) {
+    } catch (err: any) {
         return { success: false, error: err.message };
     }
 });
 
-ipcMain.handle('mcp:remove', async (event, name) => {
+ipcMain.handle('mcp:remove', async (event, name: string) => {
     try {
         await mcpManager.removeServer(name);
         return { success: true };
-    } catch (err) {
+    } catch (err: any) {
         return { success: false, error: err.message };
     }
 });
 
-ipcMain.handle('mcp:update', async (event, name, updates) => {
+ipcMain.handle('mcp:update', async (event, name: string, updates: any) => {
     try {
         await mcpManager.editServer(name, updates);
         return { success: true };
-    } catch (err) {
+    } catch (err: any) {
         return { success: false, error: err.message };
     }
 });
 
-ipcMain.handle('mcp:test', async (event, name) => {
+ipcMain.handle('mcp:test', async (event, name: string) => {
     try {
         const result = await mcpManager.testConnection(name);
         return { success: true, connected: result };
-    } catch (err) {
+    } catch (err: any) {
         return { success: false, error: err.message };
     }
 });
 
-ipcMain.handle('mcp:test-config', async (event, config) => {
+ipcMain.handle('mcp:test-config', async (event, config: any) => {
     try {
         const result = await mcpManager.testServerConfig(config);
         return { success: true, connected: result };
-    } catch (err) {
+    } catch (err: any) {
         return { success: false, error: err.message };
     }
 });
 
 // Auth / Store
-let store;
+let globalStore: any;
 
-ipcMain.handle('auth:save-token', async (event, token) => {
-    if (!store) {
+ipcMain.handle('auth:save-token', async (event, token: string) => {
+    if (!globalStore) {
         const { default: Store } = await import('electron-store');
-        store = new Store();
+        globalStore = new Store() as any;
     }
-    store.set('github_token', token);
+    globalStore.set('github_token', token);
     return true;
 });
 
 ipcMain.handle('auth:get-token', async () => {
-    if (!store) {
+    if (!globalStore) {
         const { default: Store } = await import('electron-store');
-        store = new Store();
+        globalStore = new Store() as any;
     }
-    return store.get('github_token');
+    return globalStore.get('github_token');
 });
 
 // Copilot Auth Handlers
-const CopilotAuthService = require('./copilot-auth-service');
 const copilotAuth = new CopilotAuthService();
-
-const CopilotClient = require('./copilot-client');
 const copilotClient = new CopilotClient();
 
-ipcMain.handle('auth:request-device-code', async (event, clientId) => {
+ipcMain.handle('auth:request-device-code', async (event, clientId: string) => {
     try {
         log('Auth', 'Requesting device code...');
         return await copilotAuth.requestDeviceCode(clientId);
-    } catch (err) {
+    } catch (err: any) {
         log('Auth', `Error requesting device code: ${err.message}`);
         throw err;
     }
 });
 
-ipcMain.handle('auth:poll-token', async (event, clientId, deviceCode, interval) => {
+ipcMain.handle('auth:poll-token', async (event, clientId: string, deviceCode: string, interval: number) => {
     try {
         log('Auth', 'Polling for token...');
         return await copilotAuth.pollForToken(clientId, deviceCode, interval);
-    } catch (err) {
+    } catch (err: any) {
         log('Auth', `Error polling for token: ${err.message}`);
         throw err;
     }
 });
 
 // Copilot Client Handlers
-ipcMain.handle('copilot:init', async (event, token) => {
+ipcMain.handle('copilot:init', async (event, token: string) => {
     copilotClient.initialize(token);
     const isConnected = await copilotClient.validateConnection();
     return { success: true, connected: isConnected };
@@ -423,7 +416,7 @@ ipcMain.handle('copilot:models', async () => {
     return copilotClient.listModels();
 });
 
-ipcMain.handle('copilot:chat-stream', async (event, { messages, model }) => {
+ipcMain.handle('copilot:chat-stream', async (event, { messages, model }: { messages: any[], model: string }) => {
     try {
         const win = BrowserWindow.fromWebContents(event.sender);
 
@@ -456,7 +449,7 @@ ipcMain.handle('copilot:chat-stream', async (event, { messages, model }) => {
         await mcpManager.connectAll();
 
         // Use sendPrompt (non-streaming for now, but simulating stream for frontend compatibility)
-        const response = await copilotClient.sendPrompt(lastMsg.content, mcpManager, async (toolName, args) => {
+        const response: string = await copilotClient.sendPrompt(lastMsg.content, mcpManager, async (toolName: string, args: any) => {
             // Approval Callback (Reused from Gemini logic)
             return new Promise((resolve) => {
                 const win = BrowserWindow.getAllWindows()[0];
@@ -469,32 +462,8 @@ ipcMain.handle('copilot:chat-stream', async (event, { messages, model }) => {
                 win.webContents.send('gemini:approval-request', { toolName, args });
 
                 // One-time listener for response
-                // Note: If multiple requests happen, this might overlap. Ideally use unique IDs.
-                // Assuming sequential:
                 ipcMain.once('gemini:approval-response', (event, { approved }) => {
                     log('IPC', `Approval received: ${approved}`);
-
-                    // We don't save statusMsg to activeConversation here because CopilotClient manages its own history 
-                    // loop inside sendPrompt separately from the generic activeConversation, IF we consider it separate.
-                    // However, we SHOULD update the UI.
-
-                    if (win) {
-                        // Notify UI of 'status' message if we want to show it in chat
-                        // But frontend expects messages via 'copilot:chunk' or state updates.
-                        // Currently Copilot frontend doesn't listen to 'conversation:update' as primary source?
-                        // Actually ChatInterface listens to `onConversationUpdate`.
-                        // But we haven't pushed the user message to activeConversation yet in this handler!
-                        // Let's check logic above.
-
-                        // We extracted prompt but didn't push to activeConversation in this handler.
-                        // Frontend manages history for Copilot (managesHistory = false in provider).
-                        // Wait, CopilotProvider.ts has managesHistory = false. 
-                        // So frontend *is* managing messages.
-
-                        // If frontend manages messages, it shows the logs via `ExtendedMessage` maybe?
-                        // `ChatInterface` listens to `gemini:approval-request` which is global.
-                    }
-
                     resolve(approved);
                 });
             });
@@ -508,7 +477,7 @@ ipcMain.handle('copilot:chat-stream', async (event, { messages, model }) => {
         }
 
         // --- Persistence Update ---
-        // 1. Add User Message to activeConversation (it wasn't added yet!)
+        // 1. Add User Message to activeConversation
         const userMsg = {
             id: crypto.randomUUID(),
             role: 'user',
@@ -536,7 +505,7 @@ ipcMain.handle('copilot:chat-stream', async (event, { messages, model }) => {
         // --------------------------
 
         return { success: true };
-    } catch (err) {
+    } catch (err: any) {
         console.error('[Main] Copilot chat error:', err);
         return { success: false, error: err.message };
     }
@@ -547,12 +516,10 @@ ipcMain.handle('mcp:call-tool', async (event, name, args) => {
     try {
         const result = await mcpManager.callTool(name, args);
         return { success: true, result };
-    } catch (err) {
+    } catch (err: any) {
         return { success: false, error: err.message };
     }
 });
-
-
 
 ipcMain.handle('shell:open', async (event, url) => {
     await shell.openExternal(url);

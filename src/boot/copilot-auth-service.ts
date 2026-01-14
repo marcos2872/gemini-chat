@@ -4,16 +4,16 @@ const CLIENT_DEFAULTS = { scope: 'read:user' };
 const USER_AGENT = 'Gemini-Chat-Desktop/1.0';
 
 // Helper for delay
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-class CopilotAuthService {
+export class CopilotAuthService {
     /**
      * Request a device code for authentication
      * Docs: https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow
      * POST https://github.com/login/device/code
      * @param {string} clientId 
      */
-    async requestDeviceCode(clientId) {
+    async requestDeviceCode(clientId: string) {
         console.log(`[CopilotAuthService] Requesting device code for client: ${clientId}`);
 
         try {
@@ -50,7 +50,7 @@ class CopilotAuthService {
             }
 
             return data;
-        } catch (error) {
+        } catch (error: any) {
             console.error('[CopilotAuthService] Request Code Error:', error.message);
             throw error;
         }
@@ -63,7 +63,7 @@ class CopilotAuthService {
      * @param {string} deviceCode 
      * @param {number} interval 
      */
-    async pollForToken(clientId, deviceCode, interval) {
+    async pollForToken(clientId: string, deviceCode: string, interval: number) {
         let pollInterval = Math.max(interval, 5);
         const timeout = 600 * 1000; // 10 min timeout
         const start = Date.now();
@@ -117,7 +117,7 @@ class CopilotAuthService {
                         console.warn('[CopilotAuthService] Unexpected response format:', data);
                     }
                 }
-            } catch (err) {
+            } catch (err: any) {
                 console.error("[CopilotAuthService] Polling error:", err.message);
                 // If it's a fatal logic error, we should probably stop. 
                 // But for now we treat as retriable unless explicitly thrown above.
@@ -136,5 +136,3 @@ class CopilotAuthService {
         throw new Error("Timeout polling for token");
     }
 }
-
-module.exports = CopilotAuthService;
