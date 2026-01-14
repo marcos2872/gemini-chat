@@ -9,7 +9,7 @@ class CopilotClient {
             headers: {
                 "Accept": "application/json",
                 "User-Agent": "GeminiChat-App/1.0",
-                "Editor-Version": "vscode/1.85.0", 
+                "Editor-Version": "vscode/1.85.0",
                 "Editor-Plugin-Version": "copilot/1.145.0",
             }
         });
@@ -41,18 +41,18 @@ class CopilotClient {
         try {
             console.log("[CopilotClient] Fetching models from catalog...");
             // User requested URL: https://models.github.ai/catalog/models
-            const res = await axios.get("https://models.github.ai/catalog/models", { 
+            const res = await axios.get("https://models.github.ai/catalog/models", {
                 headers: {
                     "Authorization": `Bearer ${this.accessToken}`,
                     "Accept": "application/vnd.github+json",
                     "X-GitHub-Api-Version": "2022-11-28"
                 }
             });
-            
-             if (Array.isArray(res.data)) {
+
+            if (Array.isArray(res.data)) {
                 return res.data.map(m => m.name || m.id);
             }
-             return [];
+            return [];
         } catch (error) {
             console.warn("[CopilotClient] Failed to fetch models:", error.message);
             return [];
@@ -73,7 +73,6 @@ class CopilotClient {
 
         try {
             console.log("[CopilotClient] Sending non-streaming request to models.github.ai...");
-            options.model = 'openai/gpt-5-mini';
             const response = await this.client.post(
                 "https://models.github.ai/inference/chat/completions",
                 {
@@ -82,7 +81,7 @@ class CopilotClient {
                         content: m.content
                     })),
                     model: options.model || "openai/gpt-5-mini",
-                    stream: false 
+                    stream: false
                 },
                 {
                     headers: {
@@ -95,18 +94,18 @@ class CopilotClient {
             );
 
             if (response.data && response.data.choices && response.data.choices.length > 0) {
-                 const message = response.data.choices[0].message;
-                 if (message && message.content) {
-                     onChunk(message.content);
-                 }
+                const message = response.data.choices[0].message;
+                if (message && message.content) {
+                    onChunk(message.content);
+                }
             }
 
         } catch (error) {
-             console.error("[CopilotClient] Chat request failed:", error.message);
-             if (error.response) {
-                 console.error("Data:", error.response.data);
-             }
-             throw error;
+            console.error("[CopilotClient] Chat request failed:", error.message);
+            if (error.response) {
+                console.error("Data:", error.response.data);
+            }
+            throw error;
         }
     }
 }

@@ -18,7 +18,7 @@ interface ExtendedMessage extends ChatMessage {
 
 interface ChatInterfaceProps {
     conversationId: string | null;
-    models: Array<{ name: string; displayName: string }>; 
+    models: Array<{ name: string; displayName: string }>;
     currentModel: string;
     onModelChange: (model: string) => void;
 }
@@ -29,11 +29,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
     const [messages, setMessages] = useState<ExtendedMessage[]>([]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
-    
+
     // Providers & Models
     const [activeProviderType, setActiveProviderType] = useState<ProviderType>(ProviderType.GEMINI);
     const [activeModelId, setActiveModelId] = useState<string>('gemini-2.5-flash-lite');
-    
+
     const [copilotConnected, setCopilotConnected] = useState(false);
     const [providerGroups, setProviderGroups] = useState<ProviderGroup[]>([]);
 
@@ -53,29 +53,29 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
     // Initialize Providers & Fetch Models
     useEffect(() => {
         const initProviders = async () => {
-             // 1. Initialize Gemini (Check connection)
-             const geminiStatus = await window.electronAPI.checkGeminiConnection();
-             const isGeminiReady = geminiStatus.connected;
+            // 1. Initialize Gemini (Check connection)
+            const geminiStatus = await window.electronAPI.checkGeminiConnection();
+            const isGeminiReady = geminiStatus.connected;
 
-             // Only initialize provider if ready (or maybe initialize anyway but it will be limited?)
-             // The factory initialize might fail if no key? 
-             // We'll initialize it, but the UI will show disconnected if not ready.
-             try {
-                await factory.initializeProvider(ProviderType.GEMINI); 
-             } catch (e) { console.warn("Gemini init warning", e); }
-            
+            // Only initialize provider if ready (or maybe initialize anyway but it will be limited?)
+            // The factory initialize might fail if no key? 
+            // We'll initialize it, but the UI will show disconnected if not ready.
+            try {
+                await factory.initializeProvider(ProviderType.GEMINI);
+            } catch (e) { console.warn("Gemini init warning", e); }
+
             // 2. Initialize Copilot (Persistence check)
             let isCopilotReady = false;
             try {
                 const savedToken = await window.electronAPI.getAuthToken();
                 if (savedToken) {
-                     await factory.initializeProvider(ProviderType.COPILOT, { accessToken: savedToken });
-                     isCopilotReady = true;
+                    await factory.initializeProvider(ProviderType.COPILOT, { accessToken: savedToken });
+                    isCopilotReady = true;
                 } else {
-                     await factory.initializeProvider(ProviderType.COPILOT);
+                    await factory.initializeProvider(ProviderType.COPILOT);
                 }
             } catch (e) {
-                 await factory.initializeProvider(ProviderType.COPILOT);
+                await factory.initializeProvider(ProviderType.COPILOT);
             }
             setCopilotConnected(isCopilotReady);
 
@@ -90,10 +90,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
                     gModels = await geminiProvider.getModels();
                 } catch (e) { console.error("Failed to get Gemini models", e); }
             }
-            
+
             // Fallback models if disconnected but we want to show options (optional)
             // Or just empty if disconnected.
-            
+
             groups.push({
                 provider: ProviderType.GEMINI,
                 displayName: 'Google AI',
@@ -107,36 +107,36 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
 
             // Copilot Group
             const copilotProvider = factory.getProvider(ProviderType.COPILOT);
-            
+
             let cModels: string[] = [];
             if (copilotProvider) {
-                 cModels = await copilotProvider.getModels();
+                cModels = await copilotProvider.getModels();
             }
-            
+
             groups.push({
                 provider: ProviderType.COPILOT,
                 displayName: 'GitHub Copilot Chat',
                 connected: isCopilotReady,
                 models: cModels.map(m => ({
-                     provider: ProviderType.COPILOT,
-                     id: m,
-                     displayName: m === 'gpt-4' ? 'GPT-4' : (m === 'gpt-3.5-turbo' ? 'GPT-3.5 Turbo' : m)
+                    provider: ProviderType.COPILOT,
+                    id: m,
+                    displayName: m
                 }))
             });
-            
+
             setProviderGroups(groups);
-            
+
             // Set initial active model from props
             if (currentModel) {
-                 // Check if it's gemini
-                 // We need to flatten to find
-                 const allModels = groups.flatMap(g => g.models);
-                 const found = allModels.find(m => m.id === currentModel);
-                 if (found) {
-                     setActiveModelId(found.id);
-                     setActiveProviderType(found.provider);
-                     factory.setActiveProvider(found.provider);
-                 }
+                // Check if it's gemini
+                // We need to flatten to find
+                const allModels = groups.flatMap(g => g.models);
+                const found = allModels.find(m => m.id === currentModel);
+                if (found) {
+                    setActiveModelId(found.id);
+                    setActiveProviderType(found.provider);
+                    factory.setActiveProvider(found.provider);
+                }
             }
         };
         initProviders();
@@ -170,7 +170,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
         const handleUpdate = (updatedConversation: any) => {
             if (updatedConversation.id === conversationId) {
                 setConversation(updatedConversation);
-                 const msgs = (updatedConversation.messages || []).map((m: any) => ({
+                const msgs = (updatedConversation.messages || []).map((m: any) => ({
                     ...m,
                     id: m.id || crypto.randomUUID()
                 }));
@@ -188,25 +188,25 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
     const handleModelSelection = async (option: ModelOption) => {
         const provider = factory.getProvider(option.provider);
         if (!provider) return;
-        
+
         // 1. Check Auth/Availability
         const available = await provider.isAvailable();
         if (option.provider === ProviderType.COPILOT && !available) {
-             setIsAuthModalOpen(true);
-             return;
+            setIsAuthModalOpen(true);
+            return;
         }
-        
+
         // 2. Set Active States
         factory.setActiveProvider(option.provider);
         setActiveProviderType(option.provider);
         setActiveModelId(option.id);
-        
+
         // 3. Propagate to parent if Gemini (for compatibility)
         if (option.provider === ProviderType.GEMINI) {
             onModelChange(option.id);
         }
     };
-    
+
     const handleConnectProvider = async (provider: ProviderType, credential?: string) => {
         if (provider === ProviderType.COPILOT) {
             setIsAuthModalOpen(true);
@@ -224,7 +224,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
 
     const handleAuthSuccess = async (config: any) => {
         await factory.initializeProvider(ProviderType.COPILOT, config);
-        
+
         // Save Token
         if (config.accessToken) {
             try {
@@ -233,7 +233,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
                 console.error("Failed to save token", e);
             }
         }
-        
+
         setCopilotConnected(true);
         // Refresh 
         factory.setActiveProvider(ProviderType.COPILOT);
@@ -259,20 +259,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
         const MANAGED_BY_BACKEND = provider.managesHistory;
 
         if (!MANAGED_BY_BACKEND) {
-             setMessages(updatedMessages);
+            setMessages(updatedMessages);
         } else {
-             setMessages(updatedMessages);
+            setMessages(updatedMessages);
         }
 
         try {
             // Create placeholder for assistant if using client-side streaming
             let currentAssistantMsg: ExtendedMessage | null = {
-                    id: crypto.randomUUID(),
-                    role: 'assistant',
-                    content: '',
-                    timestamp: new Date().toISOString()
+                id: crypto.randomUUID(),
+                role: 'assistant',
+                content: '',
+                timestamp: new Date().toISOString()
             };
-            
+
             // We always append the placeholder to show typing/response immediately
             setMessages([...updatedMessages, currentAssistantMsg]);
 
@@ -281,15 +281,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
             // Handle Streaming
             // Handle Streaming
             await provider.chatStream(
-                updatedMessages, 
+                updatedMessages,
                 (chunk) => {
                     console.log('[ChatInterface] Processing chunk:', chunk);
                     collectedContent += chunk;
-                    
+
                     if (currentAssistantMsg) {
                         currentAssistantMsg.content = collectedContent;
                         // Force update
-                         setMessages(prev => {
+                        setMessages(prev => {
                             console.log('[ChatInterface] Updating messages state. Prev length:', prev.length);
                             const newMsgs = [...prev];
                             // Find the assistant message to update (it should be the last one)
@@ -299,13 +299,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
                                 // Important: We match by ID or just index?
                                 // If we pushed it earlier, it's the last one.
                                 if (newMsgs[newMsgs.length - 1].id === currentAssistantMsg!.id) {
-                                     newMsgs[newMsgs.length - 1] = { ...currentAssistantMsg! };
+                                    newMsgs[newMsgs.length - 1] = { ...currentAssistantMsg! };
                                 } else {
-                                     // Fallback: search for it (though it really should be last)
-                                     const idx = newMsgs.findIndex(m => m.id === currentAssistantMsg!.id);
-                                     if (idx !== -1) {
-                                         newMsgs[idx] = { ...currentAssistantMsg! };
-                                     }
+                                    // Fallback: search for it (though it really should be last)
+                                    const idx = newMsgs.findIndex(m => m.id === currentAssistantMsg!.id);
+                                    if (idx !== -1) {
+                                        newMsgs[idx] = { ...currentAssistantMsg! };
+                                    }
                                 }
                             }
                             return newMsgs;
@@ -314,16 +314,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
                 },
                 { model: activeModelId } // Pass selected model
             );
-            
+
             // Sync with backend (logic to fetch updated full convo if managed)
             if (MANAGED_BY_BACKEND) {
-                 // The stream finished, but we might want to refresh from source of truth
-                 // to catch any 'clean up' or tool outputs that happened on server.
-                 if (conversationId) {
-                     // trigger a reload or wait for onUpdate
-                     // But we already showed the content, so it's fine.
-                     // The main use of sync here was if we needed to SAVE local state to backend.
-                 }
+                // The stream finished, but we might want to refresh from source of truth
+                // to catch any 'clean up' or tool outputs that happened on server.
+                if (conversationId) {
+                    // trigger a reload or wait for onUpdate
+                    // But we already showed the content, so it's fine.
+                    // The main use of sync here was if we needed to SAVE local state to backend.
+                }
             } else if (conversation && currentAssistantMsg) {
                 // ... legacy sync for non-managed ...
                 const finalMsgs = [...updatedMessages, { ...currentAssistantMsg, content: collectedContent }];
@@ -334,7 +334,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
 
         } catch (err: any) {
             console.error(err);
-             setMessages(prev => [...prev, {
+            setMessages(prev => [...prev, {
                 id: crypto.randomUUID(),
                 role: 'assistant',
                 content: `Error: ${err.message || 'Unknown error'}`,
@@ -350,37 +350,37 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
             handleSubmit();
         }
     };
-    
-         const formatContent = (content: string) => {
+
+    const formatContent = (content: string) => {
         if (content.startsWith('✅') || content.startsWith('❌')) return content;
         if (content.startsWith('Error:')) return content; // simplified
         return content;
     };
-    
+
     const CollapsibleLog = ({ content }: { content: string }) => {
         const [isExpanded, setIsExpanded] = useState(false);
         let title = content.split('\n')[0];
         let details = content.substring(title.length);
         return (
             <div style={{ textAlign: 'left', margin: '0.5rem 0' }}>
-               <div onClick={() => setIsExpanded(!isExpanded)} style={{ cursor: 'pointer', color: title.startsWith('✅') ? '#4CAF50' : '#f44336' }}>
-                   {isExpanded ? '▼' : '▶'} {title}
-               </div>
-               {isExpanded && <pre style={{ backgroundColor: '#1E1E1E', padding: '0.5rem', marginTop: '0.5rem' }}>{details}</pre>}
+                <div onClick={() => setIsExpanded(!isExpanded)} style={{ cursor: 'pointer', color: title.startsWith('✅') ? '#4CAF50' : '#f44336' }}>
+                    {isExpanded ? '▼' : '▶'} {title}
+                </div>
+                {isExpanded && <pre style={{ backgroundColor: '#1E1E1E', padding: '0.5rem', marginTop: '0.5rem' }}>{details}</pre>}
             </div>
         );
     };
 
     const handleDisconnectProvider = async (provider: ProviderType) => {
         if (provider === ProviderType.COPILOT) {
-             await window.electronAPI.saveAuthToken(null);
-             setCopilotConnected(false);
+            await window.electronAPI.saveAuthToken(null);
+            setCopilotConnected(false);
         } else if (provider === ProviderType.GEMINI) {
-             await window.electronAPI.setGeminiKey('');
-             // Force re-check
-             const status = await window.electronAPI.checkGeminiConnection();
-             // We can just force re-render/re-effect
-             setCopilotConnected(prev => !prev); 
+            await window.electronAPI.setGeminiKey('');
+            // Force re-check
+            const status = await window.electronAPI.checkGeminiConnection();
+            // We can just force re-render/re-effect
+            setCopilotConnected(prev => !prev);
         }
         // Reset to Gemini default if we disconnected active?
         // Simple logic for now.
@@ -388,7 +388,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', position: 'relative', backgroundColor: '#1E1E1E' }}>
-            
+
             {/* Messages Area */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
                 {messages.map((msg, idx) => (
@@ -402,10 +402,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
                         textAlign: 'left'
                     }}>
                         <strong style={{ color: msg.role === 'user' ? '#4B90F5' : '#9DA5B4' }}>
-                           {msg.role === 'user' ? 'You' : (msg.role === 'system' ? 'System' : (activeProviderType === ProviderType.COPILOT ? 'Copilot' : 'Gemini'))}
+                            {msg.role === 'user' ? 'You' : (msg.role === 'system' ? 'System' : (activeProviderType === ProviderType.COPILOT ? 'Copilot' : 'Gemini'))}
                         </strong>
                         <div style={{ whiteSpace: 'pre-wrap', marginTop: '0.5rem', lineHeight: '1.5' }}>
-                             {msg.role === 'system' ? <CollapsibleLog content={msg.content} /> : msg.content}
+                            {msg.role === 'system' ? <CollapsibleLog content={msg.content} /> : msg.content}
                         </div>
                     </div>
                 ))}
@@ -423,9 +423,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
                     style={{ width: '100%', height: '80px', backgroundColor: '#252526', border: '1px solid #3E3E42', color: '#ECECEC', padding: '0.5rem', borderRadius: '6px' }}
                 />
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', alignItems: 'center' }}>
-                     {/* Model Selector Replacement */}
-                     <div style={{ display: 'flex', gap: '8px' }}>
-                         <ModelSelector 
+                    {/* Model Selector Replacement */}
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <ModelSelector
                             groups={providerGroups}
                             currentModelId={activeModelId}
                             activeProvider={activeProviderType}
@@ -435,30 +435,30 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
                             onConfigure={() => {
                                 if (activeProviderType === ProviderType.COPILOT) setIsAuthModalOpen(true);
                             }}
-                         />
-                     </div>
-                     
-                     <div style={{ display: 'flex', gap: '8px' }}>
+                        />
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px' }}>
                         {/* Send Button */}
-                         <button onClick={handleSubmit} disabled={loading} style={{ 
-                            padding: '6px 16px', 
-                            backgroundColor: '#007ACC', 
-                            color: 'white', 
-                            border: 'none', 
+                        <button onClick={handleSubmit} disabled={loading} style={{
+                            padding: '6px 16px',
+                            backgroundColor: '#007ACC',
+                            color: 'white',
+                            border: 'none',
                             borderRadius: '4px',
                             cursor: 'pointer',
                             fontWeight: 600
-                         }}>
-                             Send
-                         </button>
-                     </div>
+                        }}>
+                            Send
+                        </button>
+                    </div>
                 </div>
             </div>
-            
-            <GitHubAuthModal 
-                isOpen={isAuthModalOpen} 
-                onClose={() => setIsAuthModalOpen(false)} 
-                onAuthenticated={handleAuthSuccess} 
+
+            <GitHubAuthModal
+                isOpen={isAuthModalOpen}
+                onClose={() => setIsAuthModalOpen(false)}
+                onAuthenticated={handleAuthSuccess}
             />
         </div>
     );
