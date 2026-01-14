@@ -112,8 +112,11 @@ Todo conteúdo voltado ao usuário ou desenvolvedor **DEVE** estar em português
 - **Lib**: `lib/IpcRouter.ts` (Roteador central de IPC).
 - **Core Services**:
     - `gemini-client.ts`: Wrapper para API do Gemini.
-    - `mcp-manager.ts`: Gerenciador de servidores MCP.
     - `conversation-storage.ts`: Persistência de chats em JSON.
+    - `mcp/`: Módulo MCP Refatorado (SRP):
+        - `McpService.ts`: Orquestrador principal e API pública.
+        - `McpConfigService.ts`: Persistência de configurações.
+        - `McpConnectionManager.ts`: Gestão de conexões/transportes.
 
 ### Shared & Type Safety (`src/boot` e `src/shared`)
 

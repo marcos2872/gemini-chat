@@ -2,7 +2,7 @@ import { IpcRouter } from '../lib/IpcRouter';
 import { IPC_CHANNELS } from '../ipc-events';
 import { CopilotClient } from '../copilot-client';
 import { CopilotAuthService } from '../copilot-auth-service';
-import { MCPServerManager } from '../mcp-manager';
+import { McpService } from '../mcp/McpService';
 import { ConversationStorage } from '../conversation-storage';
 import { BrowserWindow } from 'electron';
 import * as crypto from 'crypto';
@@ -12,7 +12,7 @@ export class AuthController {
         private router: IpcRouter,
         private copilotClient: CopilotClient,
         private copilotAuth: CopilotAuthService,
-        private mcpManager: MCPServerManager,
+        private mcpManager: McpService,
         private storage: ConversationStorage,
         private getActiveConversation: () => any,
         private setActiveConversation: (conv: any) => void

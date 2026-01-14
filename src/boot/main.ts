@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import * as path from 'path';
 import { GeminiClient } from './gemini-client';
 import { ConversationStorage } from './conversation-storage';
-import { MCPServerManager } from './mcp-manager';
+import { McpService } from './mcp/McpService';
 import { CopilotAuthService } from './copilot-auth-service';
 import { CopilotClient } from './copilot-client';
 import { IpcRouter } from './lib/IpcRouter';
@@ -21,7 +21,7 @@ const router = new IpcRouter();
 
 // State
 const storage = new ConversationStorage();
-const mcpManager = new MCPServerManager();
+const mcpService = new McpService();
 const gemini = new GeminiClient();
 const copilotAuth = new CopilotAuthService();
 const copilotClient = new CopilotClient();
@@ -78,9 +78,9 @@ app.whenReady().then(async () => {
     createWindow();
 
     // Init Controllers
-    new GeminiController(router, gemini, mcpManager, storage, getActiveConversation, setActiveConversation);
-    new AuthController(router, copilotClient, copilotAuth, mcpManager, storage, getActiveConversation, setActiveConversation);
-    new McpController(router, mcpManager);
+    new GeminiController(router, gemini, mcpService, storage, getActiveConversation, setActiveConversation);
+    new AuthController(router, copilotClient, copilotAuth, mcpService, storage, getActiveConversation, setActiveConversation);
+    new McpController(router, mcpService);
 
     // Register generic handlers
     router.registerHandler(IPC_CHANNELS.PING, () => 'pong');
@@ -119,7 +119,7 @@ app.whenReady().then(async () => {
 
     // Connect to MCP servers on startup
     console.log('[Main] Connecting to MCP servers...');
-    mcpManager.connectAll().then(() => {
+    mcpService.init().then(() => {
         console.log('[Main] MCP servers connected.');
     }).catch(err => {
         console.error('[Main] Failed to connect to MCP servers:', err);

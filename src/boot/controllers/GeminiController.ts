@@ -1,7 +1,7 @@
 import { IpcRouter } from '../lib/IpcRouter';
 import { IPC_CHANNELS } from '../ipc-events';
 import { GeminiClient } from '../gemini-client';
-import { MCPServerManager } from '../mcp-manager';
+import { McpService } from '../mcp/McpService';
 import { ConversationStorage } from '../conversation-storage';
 import { BrowserWindow } from 'electron';
 import * as crypto from 'crypto';
@@ -10,7 +10,7 @@ export class GeminiController {
     constructor(
         private router: IpcRouter,
         private gemini: GeminiClient,
-        private mcpManager: MCPServerManager,
+        private mcpManager: McpService,
         private storage: ConversationStorage,
         private getActiveConversation: () => any, // access to main state
         private setActiveConversation: (conv: any) => void

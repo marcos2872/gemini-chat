@@ -1,11 +1,11 @@
 import { IpcRouter } from '../lib/IpcRouter';
 import { IPC_CHANNELS } from '../ipc-events';
-import { MCPServerManager } from '../mcp-manager';
+import { McpService } from '../mcp/McpService';
 
 export class McpController {
     constructor(
         private router: IpcRouter,
-        private mcpManager: MCPServerManager
+        private mcpManager: McpService
     ) {
         this.registerRoutes();
     }
@@ -13,7 +13,7 @@ export class McpController {
     private registerRoutes() {
         this.router.registerHandler(IPC_CHANNELS.MCP.LIST, async () => {
             try {
-                return await this.mcpManager.loadServers();
+                return await this.mcpManager.getServers();
             } catch (err: any) {
                 console.error(`Error listing servers: ${err.message}`);
                 return [];
@@ -47,7 +47,7 @@ export class McpController {
 
         this.router.registerHandler(IPC_CHANNELS.MCP.UPDATE, async (event, name: string, updates: any) => {
             try {
-                await this.mcpManager.editServer(name, updates);
+                await this.mcpManager.updateServer(name, updates);
                 return { success: true };
             } catch (err: any) {
                 return { success: false, error: err.message };
@@ -65,7 +65,7 @@ export class McpController {
 
         this.router.registerHandler(IPC_CHANNELS.MCP.TEST_CONFIG, async (event, config: any) => {
             try {
-                const result = await this.mcpManager.testServerConfig(config);
+                const result = await this.mcpManager.testConfig(config);
                 return { success: true, connected: result };
             } catch (err: any) {
                 return { success: false, error: err.message };
