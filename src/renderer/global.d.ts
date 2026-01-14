@@ -1,4 +1,4 @@
-export {};
+export { };
 
 declare global {
   interface Window {
@@ -80,7 +80,7 @@ declare global {
       onCopilotChunk: (callback: (chunk: string) => void) => void;
 
       // Conversation
-      conversationNew: () => Promise<any>;
+      conversationNew: (options?: any) => Promise<any>;
       conversationLoad: (id: string) => Promise<any>;
       conversationList: () => Promise<any[]>;
       conversationDelete: (id: string) => Promise<{ success: boolean }>;

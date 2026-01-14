@@ -55,15 +55,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
     }, [messages]);
 
     // Initialize Providers & Fetch Models
+    // Initialize Providers & Fetch Models
     useEffect(() => {
         const initProviders = async () => {
             // 1. Initialize Gemini (Check connection)
             const geminiStatus = await window.electronAPI.checkGeminiConnection();
             const isGeminiReady = geminiStatus.connected;
 
-            // Only initialize provider if ready (or maybe initialize anyway but it will be limited?)
-            // The factory initialize might fail if no key? 
-            // We'll initialize it, but the UI will show disconnected if not ready.
             try {
                 await factory.initializeProvider(ProviderType.GEMINI);
             } catch (e) { console.warn("Gemini init warning", e); }
@@ -95,9 +93,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
                 } catch (e) { console.error("Failed to get Gemini models", e); }
             }
 
-            // Fallback models if disconnected but we want to show options (optional)
-            // Or just empty if disconnected.
-
             groups.push({
                 provider: ProviderType.GEMINI,
                 displayName: 'Google AI',
@@ -111,10 +106,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
 
             // Copilot Group
             const copilotProvider = factory.getProvider(ProviderType.COPILOT);
-
             let cModels: string[] = [];
             if (copilotProvider) {
-                cModels = await copilotProvider.getModels();
+                try {
+                    cModels = await copilotProvider.getModels();
+                } catch (e) { console.warn("Failed Copilot models", e); }
             }
 
             groups.push({
@@ -129,38 +125,35 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
             });
 
             setProviderGroups(groups);
-
-            // Set initial active model from props
-            if (currentModel) {
-                // Check if it's gemini
-                // We need to flatten to find
-                const allModels = groups.flatMap(g => g.models);
-                const found = allModels.find(m => m.id === currentModel);
-                if (found) {
-                    setActiveModelId(found.id);
-                    setActiveProviderType(found.provider);
-                    factory.setActiveProvider(found.provider);
-                }
-            }
         };
         initProviders();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [copilotConnected]); // Re-run if connected status toggles (manually or via auth)
 
-        // Setup Approval Listener
-        const cleanupApproval = window.electronAPI.onApprovalRequest((data: { toolName: string; args: any }) => {
-            console.log('[ChatInterface] Approval requested:', data);
-            setApprovalRequest(data);
-        });
-
-        // We assume onApprovalRequest returns a cleanup function if it uses EventEmitter. 
-        // If not, we might be stacking listeners if this effect re-runs. 
-        // But checking preload.js, ipcRenderer.on returns 'this' usually, but our wrapper calls callback.
-        // The wrapper ipcRenderer.on(...) returns disposable in newer Electron, but in preload.js:
-        // onApprovalRequest: (callback) => ipcRenderer.on(..., (...) => callback(...))
-        // This actually adds a listener every time initProviders runs. 
-        // Since initProviders is inside useEffect deps [currentModel, copilotConnected], it might re-run.
-        // Ideally we move this listener to a separate useEffect [] once.
-
-    }, [currentModel, copilotConnected]); // Re-run if status changes
+    // Sync Active Model from Props
+    useEffect(() => {
+        if (currentModel && providerGroups.length > 0) {
+            const allModels = providerGroups.flatMap(g => g.models);
+            const found = allModels.find(m => m.id === currentModel);
+            if (found) {
+                console.log('[ChatInterface] Syncing active model to:', found.id);
+                setActiveModelId(found.id);
+                setActiveProviderType(found.provider);
+                factory.setActiveProvider(found.provider);
+            } else {
+                // Fallback: if model is just an ID string not in list (e.g. legacy or custom)
+                // We assume Gemini default? or just set ID.
+                // Better to visually indicate unknown or try to preserve it
+                console.warn('[ChatInterface] Model not found in groups:', currentModel);
+                // Try to guess provider?
+                if (currentModel.startsWith('gemini')) {
+                    setActiveModelId(currentModel);
+                    setActiveProviderType(ProviderType.GEMINI);
+                    factory.setActiveProvider(ProviderType.GEMINI);
+                }
+            }
+        }
+    }, [currentModel, providerGroups]);
 
     // Separate effect for global listeners
     useEffect(() => {

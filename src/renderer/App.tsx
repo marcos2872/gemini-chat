@@ -15,9 +15,17 @@ const App: React.FC = () => {
         setView('chat');
     };
 
-    const handleSelectConversation = (id: string) => {
+    const handleSelectConversation = async (id: string) => {
         setCurrentConversationId(id);
         setView('chat');
+        // Restore model
+        try {
+            const conv = await window.electronAPI.conversationLoad(id);
+            if (conv && conv.model) {
+                setCurrentModel(conv.model);
+                window.electronAPI.setModel(conv.model);
+            }
+        } catch (e) { console.error(e); }
     };
 
     useEffect(() => {
@@ -45,6 +53,11 @@ const App: React.FC = () => {
                     // List is sorted by recent
                     const recent = list[0];
                     setCurrentConversationId(recent.id);
+                    // Restore model if saved
+                    if (recent.model) {
+                        setCurrentModel(recent.model);
+                        window.electronAPI.setModel(recent.model);
+                    }
                 } else {
                     await handleNewConversation();
                 }
@@ -57,11 +70,34 @@ const App: React.FC = () => {
         init();
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const handleModelChange = (model: string) => {
+    const handleModelChange = async (model: string) => {
+        // If we have an active conversation with messages, check if we need to switch
+        if (currentConversationId) {
+            try {
+                // We rely on ChatInterface to track messages, but here we can check the list or load it
+                // Faster: just always create new if model changes and ID is set?
+                // Or checking if the current conversation is empty?
+                // Let's assume we want to "Go to another chat" basically meaning start fresh.
+
+                // Fetch current conversation to see if it's empty
+                const current = await window.electronAPI.conversationLoad(currentConversationId);
+                if (current && current.messages && current.messages.length > 0) {
+                    // Start new conversation
+                    const newConv = await window.electronAPI.conversationNew({ model });
+                    setCurrentConversationId(newConv.id);
+                } else {
+                    // Empty conversation, just update model in backend for it?
+                    // Or treating it as new is safer.
+                    // But if it's empty, we can re-purpose it.
+                    // Let's update the model locally and backend
+                }
+            } catch (e) {
+                console.error("Error checking conversation state", e);
+            }
+        }
+
         setCurrentModel(model);
-        window.electronAPI.setModel(model)
-            .then(() => console.log('Model changed to', model))
-            .catch(err => console.error('Failed to change model', err));
+        await window.electronAPI.setModel(model);
     };
 
     const handleDeleteConversation = async (id: string) => {

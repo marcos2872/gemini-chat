@@ -19,13 +19,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     mcpTest: (name) => ipcRenderer.invoke('mcp:test', name),
     mcpTestConfig: (config) => ipcRenderer.invoke('mcp:test-config', config),
     mcpCallTool: (name, args) => ipcRenderer.invoke('mcp:call-tool', name, args),
-    
+
     // Auth
     saveAuthToken: (token) => ipcRenderer.invoke('auth:save-token', token),
     getAuthToken: () => ipcRenderer.invoke('auth:get-token'),
     requestDeviceCode: (clientId) => ipcRenderer.invoke('auth:request-device-code', clientId),
     pollForToken: (clientId, deviceCode, interval) => ipcRenderer.invoke('auth:poll-token', clientId, deviceCode, interval),
-    
+
     // Copilot Client
     copilotInit: (token) => ipcRenderer.invoke('copilot:init', token),
     copilotCheck: () => ipcRenderer.invoke('copilot:check-connection'),
@@ -37,7 +37,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     checkGeminiConnection: () => ipcRenderer.invoke('gemini:check-connection'),
 
     // Conversation Management
-    conversationNew: () => ipcRenderer.invoke('conversation:new'),
+    conversationNew: (options) => ipcRenderer.invoke('conversation:new', options),
     conversationLoad: (id) => ipcRenderer.invoke('conversation:load', id),
     conversationList: () => ipcRenderer.invoke('conversation:list'),
     conversationDelete: (id) => ipcRenderer.invoke('conversation:delete', id),

@@ -107,6 +107,11 @@ ipcMain.handle('gemini:prompt', async (event, prompt) => {
         };
         activeConversation.messages.push(userMsg);
 
+        // Ensure model is set in conversation
+        if (!activeConversation.model) {
+            activeConversation.model = gemini.modelName || 'gemini-2.5-flash-lite';
+        }
+
         // Connect MCP servers if not already connected (best effort)
         await mcpManager.connectAll();
 
@@ -248,8 +253,11 @@ ipcMain.handle('gemini:check-connection', async () => {
 });
 
 // Conversation Management Handlers
-ipcMain.handle('conversation:new', async () => {
+ipcMain.handle('conversation:new', async (event, options = {}) => {
     activeConversation = storage.createConversation();
+    if (options && options.model) {
+        activeConversation.model = options.model;
+    }
     await storage.saveConversation(activeConversation);
     return activeConversation;
 });
@@ -417,6 +425,11 @@ ipcMain.handle('copilot:chat-stream', async (event, { messages, model }) => {
         // Sync model if provided
         if (model) {
             copilotClient.setModel(model);
+        }
+
+        // Ensure model is set
+        if (!activeConversation.model) {
+            activeConversation.model = model || copilotClient.modelName;
         }
 
         // Extract prompt and context

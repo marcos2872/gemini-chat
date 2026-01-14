@@ -57,6 +57,11 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({ onSelect, onD
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
                         <span style={{ fontSize: '0.7rem', color: '#9DA5B4' }}>
                             {new Date(c.endTime).toLocaleDateString()} {new Date(c.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {c.messages && c.messages.length > 0 && (
+                                <span style={{ marginLeft: '8px', padding: '2px 6px', backgroundColor: '#444', borderRadius: '4px', fontSize: '0.65rem', color: '#ccc' }}>
+                                    {(c as any).model || 'Unknown'}
+                                </span>
+                            )}
                         </span>
                         <button
                             onClick={(e) => handleDelete(e, c.id)}
