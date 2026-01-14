@@ -69,6 +69,11 @@ declare global {
         callback: (data: { toolName: string; args: any }) => void
       ) => void;
       sendApprovalResponse: (approved: boolean) => void;
+
+      // System
+      openExternal: (
+        url: string
+      ) => Promise<{ success: boolean; error?: string }>;
     };
   }
 }

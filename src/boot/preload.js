@@ -36,6 +36,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onConversationUpdate: (callback) => ipcRenderer.on('conversation:update', (event, conversation) => callback(conversation)),
     // Tool Approval
     onApprovalRequest: (callback) => ipcRenderer.on('gemini:approval-request', (event, data) => callback(data)),
-    sendApprovalResponse: (approved) => ipcRenderer.send('gemini:approval-response', { approved })
+    sendApprovalResponse: (approved) => ipcRenderer.send('gemini:approval-response', { approved }),
 
+    // System
+    openExternal: (url) => ipcRenderer.invoke('shell:open', url)
 });

@@ -12,6 +12,7 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
     const [step, setStep] = useState<'init' | 'code' | 'success' | 'error'>('init');
     const [authData, setAuthData] = useState<{ user_code: string; verification_uri: string } | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [isOpening, setIsOpening] = useState(false);
 
     useEffect(() => {
         if (!isOpen) {
@@ -97,10 +98,35 @@ export const GitHubAuthModal: React.FC<GitHubAuthModalProps> = ({ isOpen, onClos
                         }}>
                             {authData.user_code}
                         </div>
-                        <p>And paste it at:</p>
-                        <a href={authData.verification_uri} target="_blank" rel="noopener noreferrer" style={{ color: '#007ACC' }}>
+                        <button 
+                            onClick={(e) => {
+                                e.preventDefault();
+                                setIsOpening(true);
+                                window.electronAPI.openExternal(authData.verification_uri);
+                                setTimeout(() => setIsOpening(false), 2000);
+                            }}
+                            style={{ 
+                                backgroundColor: isOpening ? '#45a049' : '#007ACC',
+                                color: 'white',
+                                padding: '12px 24px',
+                                border: 'none',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                fontSize: '1.1rem',
+                                fontWeight: 'bold',
+                                marginTop: '1rem',
+                                transition: 'all 0.2s',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                            }}
+                        >
+                            {isOpening ? 'Opening Browser...' : `Open Verification Page`}
+                        </button>
+                        <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '0.5rem', fontFamily: 'monospace' }}>
                             {authData.verification_uri}
-                        </a>
+                        </div>
                         <p style={{ fontSize: '0.8rem', color: '#888', marginTop: '1rem' }}>
                             Waiting for authentication...
                         </p>

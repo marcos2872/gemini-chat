@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 
 // Logging utility with prefix
@@ -352,3 +352,7 @@ ipcMain.handle('mcp:call-tool', async (event, name, args) => {
 
 
 
+ipcMain.handle('shell:open', async (event, url) => {
+    await shell.openExternal(url);
+    return { success: true };
+});
