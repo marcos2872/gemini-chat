@@ -1,31 +1,41 @@
 const axios = require('axios');
 
-const GITHUB_AUTH_URL = "https://github.com/login/oauth";
-
 class CopilotAuthService {
     constructor() {
     }
 
     /**
      * Request a device code for authentication
+     * Docs: https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow
+     * POST https://github.com/login/device/code
      * @param {string} clientId 
      */
     async requestDeviceCode(clientId) {
         try {
+            console.log(`[CopilotAuthService] Requesting device code for client: ${clientId}`);
+            
+            // NOTE: GitHub docs say POST https://github.com/login/device/code
             const res = await axios.post(
-                `https://github.com/login/device/code?client_id=${clientId}`,
+                'https://github.com/login/device/code',
+                {
+                    client_id: clientId,
+                    scope: "read:user" 
+                },
                 {
                     headers: { 
                         "Accept": "application/json",
+                        "Content-Type": "application/json",
                         "User-Agent": "Gemini-Chat-Desktop/1.0" 
                     },
                 }
             );
+            
+            console.log('[CopilotAuthService] Device Code Response:', res.data);
             return res.data;
         } catch (error) {
             console.error('[CopilotAuthService] Request Code Error:', error.message);
-            console.log('Payload:', { client_id: clientId }); 
             if (error.response) {
+                console.error('Response status:', error.response.status);
                 console.error('Response data:', error.response.data);
                 throw new Error(error.response.data.error_description || error.response.data.error || 'Failed to request device code');
             }
@@ -35,14 +45,18 @@ class CopilotAuthService {
 
     /**
      * Poll for the access token
+     * POST https://github.com/login/oauth/access_token
      * @param {string} clientId 
      * @param {string} deviceCode 
      * @param {number} interval 
      */
     async pollForToken(clientId, deviceCode, interval) {
+        // Ensure interval is at least 5 seconds
+        const pollInterval = Math.max(interval, 5);
+        
         return new Promise((resolve, reject) => {
             const start = Date.now();
-            const timeout = 300 * 1000; // 5 min timeout
+            const timeout = 600 * 1000; // 10 min timeout (GitHub codes usually last 15 min)
 
             const check = async () => {
                 if (Date.now() - start > timeout) {
@@ -52,16 +66,16 @@ class CopilotAuthService {
 
                 try {
                     const res = await axios.post(
-                        `${GITHUB_AUTH_URL}/access_token`,
-                        new URLSearchParams({
+                        'https://github.com/login/oauth/access_token',
+                        {
                             client_id: clientId,
                             device_code: deviceCode,
                             grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-                        }).toString(),
+                        },
                         {
                             headers: { 
                                 "Accept": "application/json",
-                                "Content-Type": "application/x-www-form-urlencoded",
+                                "Content-Type": "application/json",
                                 "User-Agent": "Gemini-Chat-Desktop/1.0"
                             },
                         }
@@ -69,12 +83,16 @@ class CopilotAuthService {
 
                     if (res.data.error) {
                         if (res.data.error === "authorization_pending") {
-                            setTimeout(check, (interval + 1) * 1000); // Wait + 1s buffer
+                            // Continue polling
+                            setTimeout(check, (pollInterval + 1) * 1000); 
                             return;
                         } else if (res.data.error === "slow_down") {
-                            setTimeout(check, (interval + 5) * 1000);
+                            // Increase interval
+                            console.log('[CopilotAuthService] Received slow_down, increasing interval');
+                            setTimeout(check, (pollInterval + 5) * 1000);
                             return;
                         } else {
+                            // Fatal error
                             reject(new Error(res.data.error_description || res.data.error));
                             return;
                         }
@@ -86,11 +104,15 @@ class CopilotAuthService {
                             tokenType: res.data.token_type,
                             scope: res.data.scope,
                         });
+                    } else {
+                        // Unexpected response format
+                        console.error('[CopilotAuthService] Unexpected response:', res.data);
+                        setTimeout(check, pollInterval * 1000);
                     }
                 } catch (err) {
-                    // Network error or other fatal error
-                    console.error("[CopilotAuthService] Polling error", err.message);
-                    setTimeout(check, interval * 1000);
+                    console.error("[CopilotAuthService] Polling network error", err.message);
+                    // Network glitch? retry
+                    setTimeout(check, pollInterval * 1000);
                 }
             };
 
