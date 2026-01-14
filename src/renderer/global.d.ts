@@ -54,6 +54,31 @@ declare global {
         interval: number
       ) => Promise<any>;
 
+      setGeminiKey: (
+        key: string
+      ) => Promise<{ success: boolean; valid?: boolean; error?: string }>;
+      checkGeminiConnection: () => Promise<{
+        success: boolean;
+        connected: boolean;
+        error?: string;
+      }>;
+
+      copilotInit: (
+        token: string
+      ) => Promise<{ success: boolean; error?: string }>;
+      copilotCheck: () => Promise<{
+        success: boolean;
+        connected: boolean;
+        user?: string;
+        error?: string;
+      }>;
+      copilotModels: () => Promise<any[]>;
+      copilotChatStream: (
+        messages: any[],
+        model: string
+      ) => Promise<{ success: boolean; error?: string }>;
+      onCopilotChunk: (callback: (chunk: string) => void) => void;
+
       // Conversation
       conversationNew: () => Promise<any>;
       conversationLoad: (id: string) => Promise<any>;

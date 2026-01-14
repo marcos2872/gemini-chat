@@ -19,7 +19,7 @@ interface ModelSelectorProps {
     currentModelId: string;
     activeProvider: ProviderType;
     onSelectModel: (model: ModelOption) => void;
-    onConnect: (provider: ProviderType) => void;
+    onConnect: (provider: ProviderType, credential?: string) => void;
     onConfigure?: () => void;
 }
 
@@ -177,27 +177,75 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                                 ))
                             ) : (
                                 <div style={{ padding: '8px 16px' }}>
-                                    <button 
-                                        onClick={() => onConnect(group.provider)}
-                                        style={{
-                                            width: '100%',
-                                            padding: '8px',
-                                            backgroundColor: '#252526',
-                                            border: '1px solid #3E3E42',
-                                            borderRadius: '4px',
-                                            color: '#FFF',
-                                            cursor: 'pointer',
-                                            fontSize: '0.85rem',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            gap: '6px'
-                                        }}
-                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2D2D30'}
-                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#252526'}
-                                    >
-                                        Connect {group.displayName}
-                                    </button>
+                                    {group.provider === ProviderType.GEMINI ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            <input 
+                                                type="password"
+                                                placeholder="Enter Gemini API Key"
+                                                className="gemini-key-input" 
+                                                style={{
+                                                    padding: '8px',
+                                                    borderRadius: '4px',
+                                                    border: '1px solid #3E3E42',
+                                                    backgroundColor: '#252526',
+                                                    color: 'white',
+                                                    fontSize: '0.8rem',
+                                                    width: '100%',
+                                                    boxSizing: 'border-box'
+                                                }}
+                                                onKeyDown={(e) => {
+                                                     if (e.key === 'Enter') {
+                                                         const val = (e.target as HTMLInputElement).value;
+                                                         if (val) onConnect(group.provider, val);
+                                                     }
+                                                }}
+                                            />
+                                            <button 
+                                                onClick={(e) => {
+                                                    // Find the input sibling
+                                                    const input = (e.currentTarget.previousElementSibling as HTMLInputElement);
+                                                    if (input && input.value) {
+                                                        onConnect(group.provider, input.value);
+                                                    }
+                                                }}
+                                                style={{
+                                                    width: '100%',
+                                                    padding: '6px',
+                                                    backgroundColor: '#4CAF50',
+                                                    border: 'none',
+                                                    borderRadius: '4px',
+                                                    color: '#FFF',
+                                                    cursor: 'pointer',
+                                                    fontSize: '0.8rem',
+                                                    fontWeight: 'bold'
+                                                }}
+                                            >
+                                                Save Key
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <button 
+                                            onClick={() => onConnect(group.provider)}
+                                            style={{
+                                                width: '100%',
+                                                padding: '8px',
+                                                backgroundColor: '#252526',
+                                                border: '1px solid #3E3E42',
+                                                borderRadius: '4px',
+                                                color: '#FFF',
+                                                cursor: 'pointer',
+                                                fontSize: '0.85rem',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '6px'
+                                            }}
+                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2D2D30'}
+                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#252526'}
+                                        >
+                                            Connect {group.displayName}
+                                        </button>
+                                    )}
                                 </div>
                             )}
                         </div>

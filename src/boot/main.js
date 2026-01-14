@@ -36,8 +36,17 @@ const gemini = new GeminiClient();
 app.whenReady().then(async () => {
     log('Electron', 'Application starting...');
 
+    // Load key from store if available
     try {
-        await gemini.initialize();
+        const { default: Store } = await import('electron-store');
+        const store = new Store();
+        const savedKey = store.get('gemini_api_key');
+        if (savedKey) {
+            log('Gemini', 'Found saved API Key in storage.');
+            await gemini.initialize(savedKey);
+        } else {
+            await gemini.initialize(); // Fallback to env
+        }
         log('Gemini', 'Client initialized');
     } catch (err) {
         log('Gemini', `Initialization failed: ${err.message}`);
@@ -197,6 +206,31 @@ ipcMain.handle('gemini:list-models', async () => {
 
 ipcMain.handle('gemini:history', () => gemini.getHistory()); // Raw client history, distinct from conversation storage
 
+ipcMain.handle('gemini:set-key', async (event, key) => {
+    try {
+        const { default: Store } = await import('electron-store');
+        const store = new Store();
+        store.set('gemini_api_key', key);
+        
+        await gemini.setApiKey(key);
+        const valid = await gemini.validateConnection();
+        return { success: valid, valid };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+});
+
+ipcMain.handle('gemini:check-connection', async () => {
+    try {
+        const configured = gemini.isConfigured();
+        if (!configured) return { success: true, connected: false };
+        const valid = await gemini.validateConnection();
+        return { success: true, connected: valid };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+});
+
 // Conversation Management Handlers
 ipcMain.handle('conversation:new', async () => {
     activeConversation = storage.createConversation();
@@ -321,6 +355,9 @@ ipcMain.handle('auth:get-token', async () => {
 const CopilotAuthService = require('./copilot-auth-service');
 const copilotAuth = new CopilotAuthService();
 
+const CopilotClient = require('./copilot-client');
+const copilotClient = new CopilotClient();
+
 ipcMain.handle('auth:request-device-code', async (event, clientId) => {
     try {
         log('Auth', 'Requesting device code...');
@@ -340,6 +377,35 @@ ipcMain.handle('auth:poll-token', async (event, clientId, deviceCode, interval) 
         throw err;
     }
 });
+
+// Copilot Client Handlers
+ipcMain.handle('copilot:init', async (event, token) => {
+    copilotClient.initialize(token);
+    return await copilotClient.validateConnection();
+});
+
+ipcMain.handle('copilot:check-connection', async () => {
+    return await copilotClient.validateConnection();
+});
+
+ipcMain.handle('copilot:models', async () => {
+    return copilotClient.getModels();
+});
+
+ipcMain.handle('copilot:chat-stream', async (event, { messages, model }) => {
+    try {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        await copilotClient.chatStream(messages, (chunk) => {
+            if (win) {
+                win.webContents.send('copilot:chunk', chunk);
+            }
+        }, { model });
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+});
+
 
 ipcMain.handle('mcp:call-tool', async (event, name, args) => {
     try {

@@ -26,12 +26,15 @@ class GeminiClient {
      * Initialize the Gemini SDK.
      * @returns {Promise<void>}
      */
-    async initialize() {
+    async initialize(apiKey = null) {
+        if (apiKey) {
+            this.apiKey = apiKey;
+        } else if (!this.apiKey) {
+            this.apiKey = process.env.GEMINI_API_KEY;
+        }
+
         if (!this.apiKey) {
-            console.warn('[Gemini] GEMINI_API_KEY not found in environment variables. Initialization deferred.');
-            // We allow initialization to pass without key, but subsequent calls will fail or we can throw here.
-            // Only throw if we strictly need it now. The original wrapper didn't throw on constructor.
-            // But initialize() returns a Promise.
+            console.warn('[Gemini] No API Key provided or found in environment.');
             return;
         }
 
@@ -40,17 +43,33 @@ class GeminiClient {
             this.model = this.genAI.getGenerativeModel({ model: this.modelName });
 
             // Initialize chat session
-            // Note: The SDK manages history in the chat session object.
-            // We also keep a local this.history for the UI compatibility.
-            // We can sync them if needed, but for now we start fresh.
             this.chat = this.model.startChat({
-                history: [],
+                history: [], // We manage history externally or sync it
             });
 
             console.log(`[Gemini] SDK Initialized with model: ${this.modelName}`);
         } catch (error) {
             console.error('[Gemini] Failed to initialize SDK:', error);
-            throw error;
+            // Don't throw here to allow app to start even if invalid key
+        }
+    }
+
+    async setApiKey(key) {
+        this.apiKey = key;
+        await this.initialize(key);
+    }
+    
+    isConfigured() {
+        return !!this.apiKey;
+    }
+
+    async validateConnection() {
+        if (!this.apiKey) return false;
+        try {
+            const models = await this.listModels();
+            return models.length > 0;
+        } catch (e) {
+            return false;
         }
     }
 

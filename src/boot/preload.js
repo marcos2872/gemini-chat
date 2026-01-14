@@ -25,6 +25,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAuthToken: () => ipcRenderer.invoke('auth:get-token'),
     requestDeviceCode: (clientId) => ipcRenderer.invoke('auth:request-device-code', clientId),
     pollForToken: (clientId, deviceCode, interval) => ipcRenderer.invoke('auth:poll-token', clientId, deviceCode, interval),
+    
+    // Copilot Client
+    copilotInit: (token) => ipcRenderer.invoke('copilot:init', token),
+    copilotCheck: () => ipcRenderer.invoke('copilot:check-connection'),
+    copilotModels: () => ipcRenderer.invoke('copilot:models'),
+    copilotChatStream: (messages, model) => ipcRenderer.invoke('copilot:chat-stream', { messages, model }),
+    onCopilotChunk: (callback) => ipcRenderer.on('copilot:chunk', (event, chunk) => callback(chunk)),
+
+    setGeminiKey: (key) => ipcRenderer.invoke('gemini:set-key', key),
+    checkGeminiConnection: () => ipcRenderer.invoke('gemini:check-connection'),
 
     // Conversation Management
     conversationNew: () => ipcRenderer.invoke('conversation:new'),

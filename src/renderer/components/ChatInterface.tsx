@@ -53,8 +53,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
     // Initialize Providers & Fetch Models
     useEffect(() => {
         const initProviders = async () => {
-             // 1. Initialize Gemini
-            await factory.initializeProvider(ProviderType.GEMINI); 
+             // 1. Initialize Gemini (Check connection)
+             const geminiStatus = await window.electronAPI.checkGeminiConnection();
+             const isGeminiReady = geminiStatus.connected;
+
+             // Only initialize provider if ready (or maybe initialize anyway but it will be limited?)
+             // The factory initialize might fail if no key? 
+             // We'll initialize it, but the UI will show disconnected if not ready.
+             try {
+                await factory.initializeProvider(ProviderType.GEMINI); 
+             } catch (e) { console.warn("Gemini init warning", e); }
             
             // 2. Initialize Copilot (Persistence check)
             let isCopilotReady = false;
@@ -76,27 +84,29 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
 
             // Gemini Group
             const geminiProvider = factory.getProvider(ProviderType.GEMINI);
-            if (geminiProvider) {
-                const gModels = await geminiProvider.getModels();
-                groups.push({
-                    provider: ProviderType.GEMINI,
-                    displayName: 'Google AI',
-                    connected: true, // Always connected for now (or check API?)
-                    models: gModels.map(m => ({
-                        provider: ProviderType.GEMINI,
-                        id: m,
-                        displayName: m
-                    }))
-                });
+            let gModels: string[] = [];
+            if (geminiProvider && isGeminiReady) {
+                try {
+                    gModels = await geminiProvider.getModels();
+                } catch (e) { console.error("Failed to get Gemini models", e); }
             }
+            
+            // Fallback models if disconnected but we want to show options (optional)
+            // Or just empty if disconnected.
+            
+            groups.push({
+                provider: ProviderType.GEMINI,
+                displayName: 'Google AI',
+                connected: isGeminiReady,
+                models: gModels.length > 0 ? gModels.map(m => ({
+                    provider: ProviderType.GEMINI,
+                    id: m,
+                    displayName: m
+                })) : []
+            });
 
             // Copilot Group
             const copilotProvider = factory.getProvider(ProviderType.COPILOT);
-            // We want to show the group even if disconnected, but with empty models (handled by ModelSelector logic)
-            // But ModelSelector expects models array.
-            // If disconnected, we pass empty array or full array?
-            // User requirement: "if disconnected show connect button". 
-            // So we can pass models if we have them (static list), but `connected: false` flag will override in UI.
             
             let cModels: string[] = [];
             if (copilotProvider) {
@@ -197,9 +207,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
         }
     };
     
-    const handleConnectProvider = (provider: ProviderType) => {
+    const handleConnectProvider = async (provider: ProviderType, credential?: string) => {
         if (provider === ProviderType.COPILOT) {
             setIsAuthModalOpen(true);
+        } else if (provider === ProviderType.GEMINI && credential) {
+            // Save Key
+            await window.electronAPI.setGeminiKey(credential);
+            // Force re-init (toggle a state or call initProviders)
+            // A simple way is to toggle copilotConnected or add a new dependency to the useEffect
+            // But better to just trigger a re-render or call initProviders directly?
+            // Since initProviders is inside useEffect, we can force it by updating a dummy state or moving initProviders out.
+            // For now, let's just trigger a re-mount essentially or setState.
+            setCopilotConnected(prev => !prev); // Hack to trigger effect re-run
         }
     };
 

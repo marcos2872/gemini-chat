@@ -1,65 +1,59 @@
-import axios, { AxiosInstance, AxiosError } from "axios";
 import { AuthConfig, ChatMessage } from "../types";
-
-const GITHUB_API_URL = "https://api.github.com";
-const COPILOT_CHAT_URL = "https://api.githubcopilot.com/chat/completions"; // Standard LLM endpoint for Copilot
-// NOTE: The user specified /copilot/chat. I will use the standard one if I can, or configurable.
-// User said: VITE_COPILOT_API_ENDPOINT=https://api.github.com/copilot/chat
-// I will use the Config variable.
 
 export class CopilotService {
   private authConfig: AuthConfig | null = null;
-  private client: AxiosInstance;
-  private baseUrl: string;
+  private currentChunkHandler: ((chunk: string) => void) | null = null;
 
   constructor() {
-    this.baseUrl =
-      import.meta.env.VITE_COPILOT_API_ENDPOINT ||
-      "https://api.githubcopilot.com/chat/completions";
-    this.client = axios.create({
-      timeout: 30000,
-      headers: {
-        Accept: "application/json",
-        "User-Agent": "GeminiChat-App/1.0",
-        "Editor-Version": "vscode/1.85.0", // Often required by Copilot APIs
-        "Editor-Plugin-Version": "copilot/1.145.0",
-      },
-    });
-
-    // Interceptor to add token
-    this.client.interceptors.request.use((config) => {
-      if (this.authConfig?.accessToken) {
-        config.headers.Authorization = `Bearer ${this.authConfig.accessToken}`;
-      }
-      return config;
-    });
+    // Listen for chunks from the main process
+    if (window.electronAPI?.onCopilotChunk) {
+      window.electronAPI.onCopilotChunk((chunk) => {
+        if (this.currentChunkHandler) {
+          this.currentChunkHandler(chunk);
+        }
+      });
+    }
   }
 
-  setAuthConfig(config: AuthConfig) {
+  async setAuthConfig(config: AuthConfig) {
     this.authConfig = config;
+    try {
+      if (config.accessToken) {
+        await window.electronAPI.copilotInit(config.accessToken);
+      }
+    } catch (error) {
+      console.warn("[CopilotService] Failed to initialize copilot:", error);
+    }
   }
 
   async isAvailable(): Promise<boolean> {
-    if (!this.authConfig?.accessToken) return false;
     try {
-      // Check subscription status
-      // User suggested: /user/copilot_sku_usage which returns usage info
-      await this.client.get("https://api.github.com/user/copilot_sku_usage");
-      return true;
+      const result = await window.electronAPI.copilotCheck();
+      return result.connected;
     } catch (error) {
-      console.warn("[Copilot] Availability check failed:", error);
+      console.warn("[CopilotService] Availability check failed:", error);
       return false;
     }
   }
 
   async getModels(): Promise<string[]> {
-    // Hardcoded for now as API might not list them publicly in standard format
-    return ["gpt-4", "gpt-3.5-turbo"];
+    try {
+      const models = await window.electronAPI.copilotModels();
+      return models && models.length > 0 ? models : ["gpt-4", "gpt-3.5-turbo"];
+    } catch (error) {
+      console.warn("[CopilotService] Failed to get models:", error);
+      return ["gpt-4", "gpt-3.5-turbo"];
+    }
   }
 
   async getUserInfo(): Promise<any> {
-    const res = await this.client.get("https://api.github.com/user");
-    return res.data;
+    try {
+      const result = await window.electronAPI.copilotCheck();
+      return result.user ? { login: result.user } : {};
+    } catch (error) {
+      console.warn("[CopilotService] Failed to get user info:", error);
+      return {};
+    }
   }
 
   /**
@@ -74,90 +68,22 @@ export class CopilotService {
       throw new Error("Copilot not authenticated");
     }
 
-    // Copilot often requires a specialized token exchange first (GitHub Auth Token -> Copilot Token)
-    // But adhering to the User's simplified instructions: Auth Token is used directly.
-    // If this fails, we implement the Token Exchange.
-    // Usually: GET https://api.github.com/copilot/internal/v2/token -> returns { token: "..." }
-    // Then use THAT token for chat.
+    this.currentChunkHandler = onChunk;
 
-    // I will implement the Token Exchange as it is standard behavior for "Copilot" usage.
-    let chatToken = this.authConfig.accessToken;
     try {
-      const tokenRes = await axios.get(
-        "https://api.github.com/copilot/internal/v2/token",
-        {
-          headers: {
-            Authorization: `Bearer ${this.authConfig.accessToken}`,
-            "User-Agent": "GeminiChat-App/1.0",
-          },
-        }
+      const result = await window.electronAPI.copilotChatStream(
+        messages,
+        "gpt-4"
       );
-      if (tokenRes.data && tokenRes.data.token) {
-        chatToken = tokenRes.data.token;
+
+      if (!result.success) {
+        throw new Error(result.error || "Unknown error during chat stream");
       }
-    } catch (e) {
-      console.warn("[Copilot] Token exchange failed, trying direct access:", e);
-    }
-
-    try {
-      const response = await fetch(this.baseUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${chatToken}`,
-          "Content-Type": "application/json",
-          "User-Agent": "GeminiChat-App/1.0",
-          Accept: "text/event-stream", // Request streaming
-        },
-        body: JSON.stringify({
-          messages: messages.map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
-          model: "gpt-4",
-          stream: true,
-        }),
-        signal,
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Copilot API Error ${response.status}: ${text}`);
-      }
-
-      if (!response.body) throw new Error("No response body");
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || trimmed === "data: [DONE]") continue;
-          if (trimmed.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(trimmed.slice(6));
-              const content = data.choices?.[0]?.delta?.content;
-              if (content) {
-                onChunk(content);
-              }
-            } catch (err) {
-              console.debug("Failed to parse chunk:", trimmed);
-            }
-          }
-        }
-      }
-    } catch (error: any) {
-      if (error.name === "AbortError") throw error;
-      console.error("[Copilot] Chat request failed:", error);
+    } catch (error) {
+      console.error("[CopilotService] Chat request failed:", error);
       throw error;
+    } finally {
+      this.currentChunkHandler = null;
     }
   }
 }
