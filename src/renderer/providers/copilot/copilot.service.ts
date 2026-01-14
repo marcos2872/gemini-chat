@@ -8,8 +8,11 @@ export class CopilotService {
     // Listen for chunks from the main process
     if (window.electronAPI?.onCopilotChunk) {
       window.electronAPI.onCopilotChunk((chunk) => {
+        console.log("[CopilotService] Received chunk:", chunk);
         if (this.currentChunkHandler) {
           this.currentChunkHandler(chunk);
+        } else {
+          console.warn("[CopilotService] No chunk handler assigned!");
         }
       });
     }
@@ -82,8 +85,6 @@ export class CopilotService {
     } catch (error) {
       console.error("[CopilotService] Chat request failed:", error);
       throw error;
-    } finally {
-      this.currentChunkHandler = null;
     }
   }
 }

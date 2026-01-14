@@ -266,32 +266,48 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
 
         try {
             // Create placeholder for assistant if using client-side streaming
-            let currentAssistantMsg: ExtendedMessage | null = null;
-            
-            if (!MANAGED_BY_BACKEND) {
-                 currentAssistantMsg = {
+            let currentAssistantMsg: ExtendedMessage | null = {
                     id: crypto.randomUUID(),
                     role: 'assistant',
                     content: '',
                     timestamp: new Date().toISOString()
-                };
-                setMessages([...updatedMessages, currentAssistantMsg]);
-            }
+            };
+            
+            // We always append the placeholder to show typing/response immediately
+            setMessages([...updatedMessages, currentAssistantMsg]);
 
             let collectedContent = '';
 
             // Handle Streaming
+            // Handle Streaming
             await provider.chatStream(
                 updatedMessages, 
                 (chunk) => {
+                    console.log('[ChatInterface] Processing chunk:', chunk);
                     collectedContent += chunk;
                     
-                    if (!MANAGED_BY_BACKEND && currentAssistantMsg) {
+                    if (currentAssistantMsg) {
                         currentAssistantMsg.content = collectedContent;
                         // Force update
                          setMessages(prev => {
+                            console.log('[ChatInterface] Updating messages state. Prev length:', prev.length);
                             const newMsgs = [...prev];
-                            newMsgs[newMsgs.length - 1] = { ...currentAssistantMsg! };
+                            // Find the assistant message to update (it should be the last one)
+                            // We used to only do this if !MANAGED_BY_BACKEND, but we want to show progress
+                            // for ALL providers now.
+                            if (newMsgs.length > 0) {
+                                // Important: We match by ID or just index?
+                                // If we pushed it earlier, it's the last one.
+                                if (newMsgs[newMsgs.length - 1].id === currentAssistantMsg!.id) {
+                                     newMsgs[newMsgs.length - 1] = { ...currentAssistantMsg! };
+                                } else {
+                                     // Fallback: search for it (though it really should be last)
+                                     const idx = newMsgs.findIndex(m => m.id === currentAssistantMsg!.id);
+                                     if (idx !== -1) {
+                                         newMsgs[idx] = { ...currentAssistantMsg! };
+                                     }
+                                }
+                            }
                             return newMsgs;
                         });
                     }
@@ -299,15 +315,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
                 { model: activeModelId } // Pass selected model
             );
             
-            // Sync with backend ONLY if NOT managed by backend
-            if (!MANAGED_BY_BACKEND && conversation) {
-                if (currentAssistantMsg) {
-                    const finalMsgs = [...updatedMessages, { ...currentAssistantMsg, content: collectedContent }];
-                    const newConv = { ...conversation, messages: finalMsgs, updated: Date.now() };
-                    // Sync
-                    setConversation(newConv);
-                    await window.electronAPI.conversationSync(newConv);
-                }
+            // Sync with backend (logic to fetch updated full convo if managed)
+            if (MANAGED_BY_BACKEND) {
+                 // The stream finished, but we might want to refresh from source of truth
+                 // to catch any 'clean up' or tool outputs that happened on server.
+                 if (conversationId) {
+                     // trigger a reload or wait for onUpdate
+                     // But we already showed the content, so it's fine.
+                     // The main use of sync here was if we needed to SAVE local state to backend.
+                 }
+            } else if (conversation && currentAssistantMsg) {
+                // ... legacy sync for non-managed ...
+                const finalMsgs = [...updatedMessages, { ...currentAssistantMsg, content: collectedContent }];
+                const newConv = { ...conversation, messages: finalMsgs, updated: Date.now() };
+                setConversation(newConv);
+                await window.electronAPI.conversationSync(newConv);
             }
 
         } catch (err: any) {
