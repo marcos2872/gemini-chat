@@ -35,29 +35,30 @@ class CopilotClient {
         }
     }
 
-    getModels() {
-        // Copilot doesn't typically provide a public endpoint to list models
-        // We return the supported ones.
-        return ["gpt-4", "gpt-3.5-turbo"];
-    }
+    async getModels() {
+        if (!this.accessToken) return [];
 
-    /**
-     * Get the internal token required for Chat API
-     */
-    async _getChatToken() {
         try {
-            const res = await this.client.get("https://api.github.com/copilot/internal/v2/token", {
-                headers: { Authorization: `Bearer ${this.accessToken}` }
+            console.log("[CopilotClient] Fetching models from catalog...");
+            // User requested URL: https://models.github.ai/catalog/models
+            const res = await axios.get("https://models.github.ai/catalog/models", { 
+                headers: {
+                    "Authorization": `Bearer ${this.accessToken}`,
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28"
+                }
             });
-            if (res.data && res.data.token) {
-                return res.data.token;
+            
+             if (Array.isArray(res.data)) {
+                return res.data.map(m => m.name || m.id);
             }
-            throw new Error("No token returned");
+             return [];
         } catch (error) {
-            console.error("[CopilotClient] Token exchange failed:", error.message);
-            throw error;
+            console.warn("[CopilotClient] Failed to fetch models:", error.message);
+            return [];
         }
     }
+
 
     /**
      * Stream chat completion
@@ -68,61 +69,43 @@ class CopilotClient {
     async chatStream(messages, onChunk, options = {}) {
         if (!this.accessToken) throw new Error("Not authenticated");
 
-        // 1. Get Internal Token
-        const token = await this._getChatToken();
+        const token = this.accessToken;
 
-        // 2. Call Chat API
         try {
+            console.log("[CopilotClient] Sending non-streaming request to models.github.ai...");
+            options.model = 'openai/gpt-5-mini';
             const response = await this.client.post(
-                "https://api.githubcopilot.com/chat/completions",
+                "https://models.github.ai/inference/chat/completions",
                 {
                     messages: messages.map(m => ({
                         role: m.role,
                         content: m.content
                     })),
-                    model: options.model || "gpt-4",
-                    stream: true
+                    model: options.model || "openai/gpt-5-mini",
+                    stream: false 
                 },
                 {
                     headers: {
                         "Authorization": `Bearer ${token}`,
                         "Content-Type": "application/json",
-                        "Accept": "text/event-stream"
-                    },
-                    responseType: 'stream'
+                        "Accept": "application/vnd.github+json",
+                        "X-GitHub-Api-Version": "2022-11-28"
+                    }
                 }
             );
 
-            // 3. Handle Stream
-            const stream = response.data;
-            
-             // Parse SSE
-            return new Promise((resolve, reject) => {
-                stream.on('data', (chunk) => {
-                    const lines = chunk.toString().split('\n');
-                    for (const line of lines) {
-                        const trimmed = line.trim();
-                        if (!trimmed || trimmed === 'data: [DONE]') continue;
-                        if (trimmed.startsWith('data: ')) {
-                            try {
-                                const data = JSON.parse(trimmed.slice(6));
-                                const content = data.choices?.[0]?.delta?.content;
-                                if (content) {
-                                    onChunk(content);
-                                }
-                            } catch (e) {
-                                // Ignore parse errors for partial chunks
-                            }
-                        }
-                    }
-                });
-
-                stream.on('end', () => resolve());
-                stream.on('error', (err) => reject(err));
-            });
+            if (response.data && response.data.choices && response.data.choices.length > 0) {
+                 const message = response.data.choices[0].message;
+                 if (message && message.content) {
+                     onChunk(message.content);
+                 }
+            }
 
         } catch (error) {
              console.error("[CopilotClient] Chat request failed:", error.message);
+             if (error.response) {
+                 console.error("Data:", error.response.data);
+             }
              throw error;
         }
     }

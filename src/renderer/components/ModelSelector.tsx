@@ -20,6 +20,7 @@ interface ModelSelectorProps {
     activeProvider: ProviderType;
     onSelectModel: (model: ModelOption) => void;
     onConnect: (provider: ProviderType, credential?: string) => void;
+    onDisconnect?: (provider: ProviderType) => void;
     onConfigure?: () => void;
 }
 
@@ -29,6 +30,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     activeProvider,
     onSelectModel,
     onConnect,
+    onDisconnect,
     onConfigure
 }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -136,7 +138,30 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                                 alignItems: 'center'
                             }}>
                                 <span>{group.displayName}</span>
-                                {!group.connected && (
+                                {group.connected ? (
+                                    onDisconnect && (
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onDisconnect(group.provider);
+                                            }}
+                                            style={{
+                                                background: 'none',
+                                                border: 'none',
+                                                color: '#f44336',
+                                                cursor: 'pointer',
+                                                fontSize: '0.7rem',
+                                                padding: '2px 6px',
+                                                borderRadius: '2px',
+                                            }}
+                                            title="Disconnect"
+                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(244, 67, 54, 0.1)'}
+                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                        >
+                                            ✕
+                                        </button>
+                                    )
+                                ) : (
                                     <span style={{ fontSize: '0.7rem', color: '#666' }}>Disconnected</span>
                                 )}
                             </div>
@@ -251,26 +276,6 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                         </div>
                     ))}
                     
-                    <div style={{ borderTop: '1px solid #333', marginTop: '4px', paddingTop: '4px' }}>
-                         <div
-                            onClick={() => {
-                                if (onConfigure) onConfigure();
-                                setIsOpen(false);
-                            }}
-                            style={{
-                                padding: '8px 16px',
-                                fontSize: '0.85rem',
-                                color: '#CCC',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                justifyContent: 'flex-end'
-                            }}
-                             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2D2D30'}
-                             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                        >
-                            Configure <span style={{ color: '#666', marginLeft: '6px', fontSize: '0.75rem' }}>Ctrl-Alt-C</span>
-                        </div>
-                    </div>
                 </div>
             )}
         </div>

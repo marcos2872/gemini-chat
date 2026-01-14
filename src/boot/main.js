@@ -381,11 +381,13 @@ ipcMain.handle('auth:poll-token', async (event, clientId, deviceCode, interval) 
 // Copilot Client Handlers
 ipcMain.handle('copilot:init', async (event, token) => {
     copilotClient.initialize(token);
-    return await copilotClient.validateConnection();
+    const isConnected = await copilotClient.validateConnection();
+    return { success: true, connected: isConnected };
 });
 
 ipcMain.handle('copilot:check-connection', async () => {
-    return await copilotClient.validateConnection();
+    const isConnected = await copilotClient.validateConnection();
+    return { success: true, connected: isConnected };
 });
 
 ipcMain.handle('copilot:models', async () => {

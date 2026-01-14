@@ -97,6 +97,7 @@ class CopilotAuthService {
                             return;
                         }
                     }
+                    console.log('[CopilotAuthService] Token response:', res.data);
 
                     if (res.data.access_token) {
                         resolve({

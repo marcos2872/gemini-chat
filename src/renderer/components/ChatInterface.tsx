@@ -371,6 +371,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
         );
     };
 
+    const handleDisconnectProvider = async (provider: ProviderType) => {
+        if (provider === ProviderType.COPILOT) {
+             await window.electronAPI.saveAuthToken(null);
+             setCopilotConnected(false);
+        } else if (provider === ProviderType.GEMINI) {
+             await window.electronAPI.setGeminiKey('');
+             // Force re-check
+             const status = await window.electronAPI.checkGeminiConnection();
+             // We can just force re-render/re-effect
+             setCopilotConnected(prev => !prev); 
+        }
+        // Reset to Gemini default if we disconnected active?
+        // Simple logic for now.
+    };
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', position: 'relative', backgroundColor: '#1E1E1E' }}>
             
@@ -416,6 +431,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
                             activeProvider={activeProviderType}
                             onSelectModel={handleModelSelection}
                             onConnect={handleConnectProvider}
+                            onDisconnect={handleDisconnectProvider}
                             onConfigure={() => {
                                 if (activeProviderType === ProviderType.COPILOT) setIsAuthModalOpen(true);
                             }}
