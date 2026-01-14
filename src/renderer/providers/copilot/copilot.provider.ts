@@ -26,7 +26,7 @@ export class CopilotProvider implements ChatProvider {
     return this.service.isAvailable();
   }
 
-  async getModels(): Promise<string[]> {
+  async getModels(): Promise<any[]> {
     return this.service.getModels();
   }
 
@@ -49,7 +49,7 @@ export class CopilotProvider implements ChatProvider {
     onChunk: (chunk: string) => void,
     options?: ChatOptions
   ): Promise<void> {
-    await this.service.chatStream(messages, onChunk, options?.signal);
+    await this.service.chatStream(messages, onChunk, options);
   }
 
   async getUserInfo() {

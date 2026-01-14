@@ -39,7 +39,7 @@ export class CopilotService {
     }
   }
 
-  async getModels(): Promise<string[]> {
+  async getModels(): Promise<any[]> {
     try {
       const models = await window.electronAPI.copilotModels();
       return models && models.length > 0 ? models : ["gpt-4", "gpt-3.5-turbo"];
@@ -65,18 +65,19 @@ export class CopilotService {
   async chatStream(
     messages: ChatMessage[],
     onChunk: (chunk: string) => void,
-    signal?: AbortSignal
+    options?: any
   ): Promise<void> {
     if (!this.authConfig?.accessToken) {
       throw new Error("Copilot not authenticated");
     }
 
     this.currentChunkHandler = onChunk;
+    const model = options?.model || "gpt-4o";
 
     try {
       const result = await window.electronAPI.copilotChatStream(
         messages,
-        "gpt-4"
+        model
       );
 
       if (!result.success) {

@@ -29,7 +29,7 @@ export class GeminiProvider implements ChatProvider {
     }
   }
 
-  async getModels(): Promise<string[]> {
+  async getModels(): Promise<any[]> {
     try {
       const models = await window.electronAPI.listModels();
       return models.map((m) => m.name);

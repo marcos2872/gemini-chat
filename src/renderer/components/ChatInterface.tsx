@@ -98,10 +98,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
                 provider: ProviderType.GEMINI,
                 displayName: 'Google AI',
                 connected: isGeminiReady,
-                models: gModels.length > 0 ? gModels.map(m => ({
+                models: gModels.length > 0 ? gModels.map((m: any) => ({
                     provider: ProviderType.GEMINI,
-                    id: m,
-                    displayName: m
+                    id: m.name || m,
+                    displayName: m.displayName || m.name || m
                 })) : []
             });
 
@@ -117,10 +117,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
                 provider: ProviderType.COPILOT,
                 displayName: 'GitHub Copilot Chat',
                 connected: isCopilotReady,
-                models: cModels.map(m => ({
+                models: cModels.map((m: any) => ({
                     provider: ProviderType.COPILOT,
-                    id: m,
-                    displayName: m
+                    id: m.name || m,
+                    displayName: m.displayName || m.name || m
                 }))
             });
 

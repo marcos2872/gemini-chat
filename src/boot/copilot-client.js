@@ -1,9 +1,17 @@
 const axios = require('axios');
 
+/**
+ * @typedef {Object} Message
+ * @property {string} role - 'user' | 'assistant' | 'system'
+ * @property {string} content - The text content
+ * @property {string} timestamp - ISO string of the time
+ */
+
 class CopilotClient {
     constructor() {
         this.accessToken = null;
-        this.chatToken = null;
+        this.modelName = 'gpt-4o'; // Default to a standard model
+        this.history = [];
         this.client = axios.create({
             timeout: 30000,
             headers: {
@@ -17,6 +25,15 @@ class CopilotClient {
 
     initialize(accessToken) {
         this.accessToken = accessToken;
+        console.log(`[Copilot] Initialized with model: ${this.modelName}`);
+    }
+
+    async setApiKey(key) {
+        this.initialize(key);
+    }
+
+    isConfigured() {
+        return !!this.accessToken;
     }
 
     /**
@@ -35,12 +52,24 @@ class CopilotClient {
         }
     }
 
-    async getModels() {
+    /**
+     * Set the current model.
+     * @param {string} modelName
+     */
+    async setModel(modelName) {
+        console.log(`[Copilot] Switching model to: ${modelName}`);
+        this.modelName = modelName;
+    }
+
+    /**
+     * List available models.
+     * @returns {Promise<Array<{name: string, displayName: string}>>}
+     */
+    async listModels() {
         if (!this.accessToken) return [];
 
         try {
             console.log("[CopilotClient] Fetching models from catalog...");
-            // User requested URL: https://models.github.ai/catalog/models
             const res = await axios.get("https://models.github.ai/catalog/models", {
                 headers: {
                     "Authorization": `Bearer ${this.accessToken}`,
@@ -50,7 +79,10 @@ class CopilotClient {
             });
 
             if (Array.isArray(res.data)) {
-                return res.data.map(m => m.name || m.id);
+                return res.data.map(m => ({
+                    name: m.id || m.name,
+                    displayName: m.name || m.id
+                }));
             }
             return [];
         } catch (error) {
@@ -59,33 +91,37 @@ class CopilotClient {
         }
     }
 
-
     /**
-     * Stream chat completion
-     * @param {Array} messages 
-     * @param {Function} onChunk 
-     * @param {Object} options 
+     * Send a prompt to the model.
+     * @param {string} prompt 
+     * @param {Object} [mcpManager] - Ignored for now
+     * @param {Function} [onApproval] - Ignored for now
+     * @returns {Promise<string>}
      */
-    async chatStream(messages, onChunk, options = {}) {
+    async sendPrompt(prompt, mcpManager, onApproval) {
         if (!this.accessToken) throw new Error("Not authenticated");
 
-        const token = this.accessToken;
+        this._addToHistory('user', prompt);
+
+        // Prepare messages from history
+        // Copilot (OpenAI compatible) expects { role, content }
+        const messages = this.history.map(m => ({
+            role: m.role,
+            content: m.content
+        }));
 
         try {
-            console.log("[CopilotClient] Sending non-streaming request to models.github.ai...");
+            console.log(`[Copilot] Sending prompt to ${this.modelName}...`);
             const response = await this.client.post(
                 "https://models.github.ai/inference/chat/completions",
                 {
-                    messages: messages.map(m => ({
-                        role: m.role,
-                        content: m.content
-                    })),
-                    model: options.model || "openai/gpt-5-mini",
+                    messages: messages,
+                    model: this.modelName,
                     stream: false
                 },
                 {
                     headers: {
-                        "Authorization": `Bearer ${token}`,
+                        "Authorization": `Bearer ${this.accessToken}`,
                         "Content-Type": "application/json",
                         "Accept": "application/vnd.github+json",
                         "X-GitHub-Api-Version": "2022-11-28"
@@ -96,9 +132,11 @@ class CopilotClient {
             if (response.data && response.data.choices && response.data.choices.length > 0) {
                 const message = response.data.choices[0].message;
                 if (message && message.content) {
-                    onChunk(message.content);
+                    this._addToHistory('assistant', message.content);
+                    return message.content;
                 }
             }
+            throw new Error("No content in response");
 
         } catch (error) {
             console.error("[CopilotClient] Chat request failed:", error.message);
@@ -108,6 +146,27 @@ class CopilotClient {
             throw error;
         }
     }
+
+    _addToHistory(role, content) {
+        const msg = {
+            role,
+            content,
+            timestamp: new Date().toISOString()
+        };
+        this.history.push(msg);
+        return msg;
+    }
+
+    getHistory() {
+        return this.history;
+    }
+
+    /**
+     * Legacy support if needed, or removing for purity.
+     * Keeping it might break the "same interface" contract if inferred,
+     * but removing it is safer for uniformity.
+     * I will remove chatStream as per plan.
+     */
 }
 
 module.exports = CopilotClient;

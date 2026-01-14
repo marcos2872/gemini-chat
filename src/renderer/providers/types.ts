@@ -57,7 +57,7 @@ export interface ChatProvider {
   /**
    * Get list of available models
    */
-  getModels(): Promise<string[]>;
+  getModels(): Promise<any[]>;
 
   /**
    * Send a chat message (single response)

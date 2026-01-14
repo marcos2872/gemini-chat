@@ -211,7 +211,7 @@ ipcMain.handle('gemini:set-key', async (event, key) => {
         const { default: Store } = await import('electron-store');
         const store = new Store();
         store.set('gemini_api_key', key);
-        
+
         await gemini.setApiKey(key);
         const valid = await gemini.validateConnection();
         return { success: valid, valid };
@@ -391,19 +391,44 @@ ipcMain.handle('copilot:check-connection', async () => {
 });
 
 ipcMain.handle('copilot:models', async () => {
-    return copilotClient.getModels();
+    return copilotClient.listModels();
 });
 
 ipcMain.handle('copilot:chat-stream', async (event, { messages, model }) => {
     try {
         const win = BrowserWindow.fromWebContents(event.sender);
-        await copilotClient.chatStream(messages, (chunk) => {
-            if (win) {
-                win.webContents.send('copilot:chunk', chunk);
-            }
-        }, { model });
+
+        // Sync model if provided
+        if (model) {
+            copilotClient.setModel(model);
+        }
+
+        // Extract prompt and context
+        // messages format from frontend: [{role, content}, ...]
+        const lastMsg = messages[messages.length - 1];
+        const context = messages.slice(0, -1);
+
+        // Sync history to client to ensure context is aware
+        // We directly overwrite history to match the requested context
+        copilotClient.history = context.map(m => ({
+            role: m.role,
+            content: m.content,
+            timestamp: new Date().toISOString()
+        }));
+
+        console.log(`[Main] Forwarding prompt to Copilot: ${lastMsg.content.substring(0, 50)}...`);
+
+        // Use sendPrompt (non-streaming for now, but simulating stream for frontend compatibility)
+        const response = await copilotClient.sendPrompt(lastMsg.content);
+
+        // Send as one chunk since we are not streaming in the new client yet
+        if (win) {
+            win.webContents.send('copilot:chunk', response);
+        }
+
         return { success: true };
     } catch (err) {
+        console.error('[Main] Copilot chat error:', err);
         return { success: false, error: err.message };
     }
 });
