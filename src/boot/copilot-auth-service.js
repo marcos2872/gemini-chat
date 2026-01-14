@@ -1,9 +1,12 @@
-const axios = require('axios');
+const GITHUB_DEVICE_CODE_URL = 'https://github.com/login/device/code';
+const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';
+const CLIENT_DEFAULTS = { scope: 'read:user' };
+const USER_AGENT = 'Gemini-Chat-Desktop/1.0';
+
+// Helper for delay
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 class CopilotAuthService {
-    constructor() {
-    }
-
     /**
      * Request a device code for authentication
      * Docs: https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow
@@ -11,34 +14,44 @@ class CopilotAuthService {
      * @param {string} clientId 
      */
     async requestDeviceCode(clientId) {
+        console.log(`[CopilotAuthService] Requesting device code for client: ${clientId}`);
+
         try {
-            console.log(`[CopilotAuthService] Requesting device code for client: ${clientId}`);
-            
-            // NOTE: GitHub docs say POST https://github.com/login/device/code
-            const res = await axios.post(
-                'https://github.com/login/device/code',
-                {
-                    client_id: clientId,
-                    scope: "read:user" 
+            const response = await fetch(GITHUB_DEVICE_CODE_URL, {
+                method: 'POST',
+                headers: {
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "User-Agent": USER_AGENT
                 },
-                {
-                    headers: { 
-                        "Accept": "application/json",
-                        "Content-Type": "application/json",
-                        "User-Agent": "Gemini-Chat-Desktop/1.0" 
-                    },
-                }
-            );
-            
-            console.log('[CopilotAuthService] Device Code Response:', res.data);
-            return res.data;
+                body: JSON.stringify({
+                    client_id: clientId,
+                    scope: CLIENT_DEFAULTS.scope
+                })
+            });
+
+            if (!response.ok) {
+                // Try to parse error details if available
+                let errorDetails = `HTTP Error ${response.status}`;
+                try {
+                    const errData = await response.json();
+                    errorDetails = errData.error_description || errData.error || errorDetails;
+                } catch (e) { /* ignore parse error */ }
+
+                throw new Error(errorDetails);
+            }
+
+            const data = await response.json();
+            console.log('[CopilotAuthService] Device Code Response:', data);
+
+            // Check for functional errors inside 200 OK
+            if (data.error) {
+                throw new Error(data.error_description || data.error);
+            }
+
+            return data;
         } catch (error) {
             console.error('[CopilotAuthService] Request Code Error:', error.message);
-            if (error.response) {
-                console.error('Response status:', error.response.status);
-                console.error('Response data:', error.response.data);
-                throw new Error(error.response.data.error_description || error.response.data.error || 'Failed to request device code');
-            }
             throw error;
         }
     }
@@ -51,74 +64,76 @@ class CopilotAuthService {
      * @param {number} interval 
      */
     async pollForToken(clientId, deviceCode, interval) {
-        // Ensure interval is at least 5 seconds
-        const pollInterval = Math.max(interval, 5);
-        
-        return new Promise((resolve, reject) => {
-            const start = Date.now();
-            const timeout = 600 * 1000; // 10 min timeout (GitHub codes usually last 15 min)
+        let pollInterval = Math.max(interval, 5);
+        const timeout = 600 * 1000; // 10 min timeout
+        const start = Date.now();
 
-            const check = async () => {
-                if (Date.now() - start > timeout) {
-                    reject(new Error("Timeout polling for token"));
-                    return;
-                }
+        console.log('[CopilotAuthService] Starting poll for token...');
 
-                try {
-                    const res = await axios.post(
-                        'https://github.com/login/oauth/access_token',
-                        {
-                            client_id: clientId,
-                            device_code: deviceCode,
-                            grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-                        },
-                        {
-                            headers: { 
-                                "Accept": "application/json",
-                                "Content-Type": "application/json",
-                                "User-Agent": "Gemini-Chat-Desktop/1.0"
-                            },
-                        }
-                    );
+        while (Date.now() - start < timeout) {
+            try {
+                const response = await fetch(GITHUB_TOKEN_URL, {
+                    method: 'POST',
+                    headers: {
+                        "Accept": "application/json",
+                        "Content-Type": "application/json",
+                        "User-Agent": USER_AGENT
+                    },
+                    body: JSON.stringify({
+                        client_id: clientId,
+                        device_code: deviceCode,
+                        grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+                    })
+                });
 
-                    if (res.data.error) {
-                        if (res.data.error === "authorization_pending") {
+                // Network or Server Errors
+                if (!response.ok) {
+                    console.warn(`[CopilotAuthService] Poll request failed: ${response.status}`);
+                    // Non-fatal, just wait and retry unless it's 400/401/403 permanent failures?
+                    // GitHub docs say some errors are returned as 200 with error field, but 404/500 might happen.
+                    // We'll treat HTTP errors as retriable for now mostly, or throw if critical.
+                } else {
+                    const data = await response.json();
+
+                    if (data.error) {
+                        if (data.error === "authorization_pending") {
                             // Continue polling
-                            setTimeout(check, (pollInterval + 1) * 1000); 
-                            return;
-                        } else if (res.data.error === "slow_down") {
-                            // Increase interval
+                            // console.debug('[CopilotAuthService] authorization_pending...');
+                        } else if (data.error === "slow_down") {
                             console.log('[CopilotAuthService] Received slow_down, increasing interval');
-                            setTimeout(check, (pollInterval + 5) * 1000);
-                            return;
+                            pollInterval += 5;
                         } else {
-                            // Fatal error
-                            reject(new Error(res.data.error_description || res.data.error));
-                            return;
+                            // Fatal error (e.g., expired_token, access_denied)
+                            throw new Error(data.error_description || data.error);
                         }
-                    }
-                    console.log('[CopilotAuthService] Token response:', res.data);
-
-                    if (res.data.access_token) {
-                        resolve({
-                            accessToken: res.data.access_token,
-                            tokenType: res.data.token_type,
-                            scope: res.data.scope,
-                        });
+                    } else if (data.access_token) {
+                        console.log('[CopilotAuthService] Token received successfully.');
+                        return {
+                            accessToken: data.access_token,
+                            tokenType: data.token_type,
+                            scope: data.scope,
+                        };
                     } else {
-                        // Unexpected response format
-                        console.error('[CopilotAuthService] Unexpected response:', res.data);
-                        setTimeout(check, pollInterval * 1000);
+                        console.warn('[CopilotAuthService] Unexpected response format:', data);
                     }
-                } catch (err) {
-                    console.error("[CopilotAuthService] Polling network error", err.message);
-                    // Network glitch? retry
-                    setTimeout(check, pollInterval * 1000);
                 }
-            };
+            } catch (err) {
+                console.error("[CopilotAuthService] Polling error:", err.message);
+                // If it's a fatal logic error, we should probably stop. 
+                // But for now we treat as retriable unless explicitly thrown above.
+                if (!err.message.includes('fetch')) {
+                    // logic errors re-thrown
+                    if (err.message !== 'Failed to fetch' && !err.message.includes('network')) {
+                        throw err;
+                    }
+                }
+            }
 
-            check();
-        });
+            // Wait before next attempt
+            await delay(pollInterval * 1000);
+        }
+
+        throw new Error("Timeout polling for token");
     }
 }
 

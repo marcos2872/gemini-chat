@@ -1,4 +1,13 @@
-const axios = require('axios');
+const GITHUB_API_USER_URL = "https://api.github.com/user";
+const GITHUB_MODELS_CATALOG_URL = "https://models.github.ai/catalog/models";
+const GITHUB_INFERENCE_URL = "https://models.github.ai/inference/chat/completions";
+
+const DEFAULT_HEADERS = {
+    "Accept": "application/json",
+    "User-Agent": "GeminiChat-App/1.0",
+    "Editor-Version": "vscode/1.85.0",
+    "Editor-Plugin-Version": "copilot/1.145.0",
+};
 
 /**
  * @typedef {Object} Message
@@ -12,15 +21,7 @@ class CopilotClient {
         this.accessToken = null;
         this.modelName = 'gpt-4o'; // Default to a standard model
         this.history = [];
-        this.client = axios.create({
-            timeout: 30000,
-            headers: {
-                "Accept": "application/json",
-                "User-Agent": "GeminiChat-App/1.0",
-                "Editor-Version": "vscode/1.85.0",
-                "Editor-Plugin-Version": "copilot/1.145.0",
-            }
-        });
+        this.timeoutMs = 30000;
     }
 
     initialize(accessToken) {
@@ -42,10 +43,20 @@ class CopilotClient {
     async validateConnection() {
         if (!this.accessToken) return false;
         try {
-            await this.client.get("https://api.github.com/user", {
-                headers: { Authorization: `Bearer ${this.accessToken}` }
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+
+            const response = await fetch(GITHUB_API_USER_URL, {
+                method: 'GET',
+                headers: {
+                    ...DEFAULT_HEADERS,
+                    Authorization: `Bearer ${this.accessToken}`
+                },
+                signal: controller.signal
             });
-            return true;
+
+            clearTimeout(timeoutId);
+            return response.ok;
         } catch (error) {
             console.error("[CopilotClient] Connection check failed:", error.message);
             return false;
@@ -70,16 +81,32 @@ class CopilotClient {
 
         try {
             console.log("[CopilotClient] Fetching models from catalog...");
-            const res = await axios.get("https://models.github.ai/catalog/models", {
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+
+            const response = await fetch(GITHUB_MODELS_CATALOG_URL, {
+                method: 'GET',
                 headers: {
+                    ...DEFAULT_HEADERS,
                     "Authorization": `Bearer ${this.accessToken}`,
                     "Accept": "application/vnd.github+json",
                     "X-GitHub-Api-Version": "2022-11-28"
-                }
+                },
+                signal: controller.signal
             });
 
-            if (Array.isArray(res.data)) {
-                return res.data.map(m => ({
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                console.warn(`[CopilotClient] Failed to fetch models: ${response.status}`);
+                return [];
+            }
+
+            const data = await response.json();
+
+            if (Array.isArray(data)) {
+                return data.map(m => ({
                     name: m.id || m.name,
                     displayName: m.name || m.id
                 }));
@@ -137,26 +164,42 @@ class CopilotClient {
                     payload.tool_choice = "auto";
                 }
 
-                const response = await this.client.post(
-                    "https://models.github.ai/inference/chat/completions",
-                    payload,
-                    {
-                        headers: {
-                            "Authorization": `Bearer ${this.accessToken}`,
-                            "Content-Type": "application/json",
-                            "Accept": "application/vnd.github+json",
-                            "X-GitHub-Api-Version": "2022-11-28"
-                        }
-                    }
-                );
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
-                if (response.data && response.data.choices && response.data.choices.length > 0) {
-                    const message = response.data.choices[0].message;
+                const response = await fetch(GITHUB_INFERENCE_URL, {
+                    method: 'POST',
+                    headers: {
+                        ...DEFAULT_HEADERS,
+                        "Authorization": `Bearer ${this.accessToken}`,
+                        "Content-Type": "application/json",
+                        "Accept": "application/vnd.github+json",
+                        "X-GitHub-Api-Version": "2022-11-28"
+                    },
+                    body: JSON.stringify(payload),
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    let errorMsg = `HTTP Error ${response.status}`;
+                    try {
+                        const errData = await response.json();
+                        if (errData.error) {
+                            errorMsg = typeof errData.error === 'string' ? errData.error : JSON.stringify(errData.error);
+                        }
+                    } catch (e) { /* ignore */ }
+                    throw new Error(errorMsg);
+                }
+
+                const data = await response.json();
+
+                if (data && data.choices && data.choices.length > 0) {
+                    const message = data.choices[0].message;
 
                     // Add assistant message to local history (and to next request)
                     messages.push(message);
-                    // Note: 'message' object from OpenAI API contains {role, content, tool_calls?}
-                    // We directly push it to maintain the conversation context for next turn.
 
                     if (message.tool_calls && message.tool_calls.length > 0) {
                         console.log('[Copilot] Model requested tool calls:', JSON.stringify(message.tool_calls));
@@ -206,24 +249,16 @@ class CopilotClient {
                             this._addToHistory('assistant', message.content);
                             return message.content;
                         } else {
-                            // Rare case: content is null but no tool calls?
-                            // Maybe just stop?
-                            return "";
+                            throw new Error("No content in response");
                         }
                     }
                 } else {
                     console.warn("[Copilot] Response contained no choices/messages.");
-                    // throw new Error("No content in response"); 
-                    // Instead of throw, return empty string so UI doesn't crash?
-                    // Or keep throwing to signal error.
                     throw new Error("No content in response");
                 }
 
             } catch (error) {
                 console.error("[CopilotClient] Chat request failed:", error.message);
-                if (error.response) {
-                    console.error("Data:", error.response.data);
-                }
                 throw error;
             }
         }
@@ -255,13 +290,6 @@ class CopilotClient {
     getHistory() {
         return this.history;
     }
-
-    /**
-     * Legacy support if needed, or removing for purity.
-     * Keeping it might break the "same interface" contract if inferred,
-     * but removing it is safer for uniformity.
-     * I will remove chatStream as per plan.
-     */
 }
 
 module.exports = CopilotClient;
