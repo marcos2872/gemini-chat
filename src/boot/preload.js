@@ -18,6 +18,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     mcpUpdate: (name, updates) => ipcRenderer.invoke('mcp:update', name, updates),
     mcpTest: (name) => ipcRenderer.invoke('mcp:test', name),
     mcpTestConfig: (config) => ipcRenderer.invoke('mcp:test-config', config),
+    mcpCallTool: (name, args) => ipcRenderer.invoke('mcp:call-tool', name, args),
+    
+    // Auth
+    saveAuthToken: (token) => ipcRenderer.invoke('auth:save-token', token),
+    getAuthToken: () => ipcRenderer.invoke('auth:get-token'),
+    requestDeviceCode: (clientId) => ipcRenderer.invoke('auth:request-device-code', clientId),
+    pollForToken: (clientId, deviceCode, interval) => ipcRenderer.invoke('auth:poll-token', clientId, deviceCode, interval),
 
     // Conversation Management
     conversationNew: () => ipcRenderer.invoke('conversation:new'),
@@ -25,6 +32,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     conversationList: () => ipcRenderer.invoke('conversation:list'),
     conversationDelete: (id) => ipcRenderer.invoke('conversation:delete', id),
     conversationExport: (id, format) => ipcRenderer.invoke('conversation:export', id, format),
+    conversationSync: (conversation) => ipcRenderer.invoke('conversation:sync', conversation),
     onConversationUpdate: (callback) => ipcRenderer.on('conversation:update', (event, conversation) => callback(conversation)),
     // Tool Approval
     onApprovalRequest: (callback) => ipcRenderer.on('gemini:approval-request', (event, data) => callback(data)),

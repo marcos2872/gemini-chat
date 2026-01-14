@@ -11,6 +11,7 @@ export default defineConfig({
         outDir: path.join(__dirname, 'dist/renderer'),
         emptyOutDir: true,
     },
+    envDir: __dirname, // Load .env from project root
     server: {
         port: 3000,
     }

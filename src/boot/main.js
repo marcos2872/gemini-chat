@@ -219,6 +219,17 @@ ipcMain.handle('conversation:list', async () => storage.listConversations());
 ipcMain.handle('conversation:delete', async (event, id) => storage.deleteConversation(id));
 ipcMain.handle('conversation:export', async (event, id, format) => storage.exportConversation(id, format));
 
+ipcMain.handle('conversation:sync', async (event, conversation) => {
+    try {
+        activeConversation = conversation;
+        await storage.saveConversation(activeConversation);
+        return { success: true };
+    } catch (err) {
+        log('IPC', `Error syncing conversation: ${err.message}`);
+        return { success: false, error: err.message };
+    }
+});
+
 
 // MCP Handlers
 ipcMain.handle('mcp:list', async () => {
@@ -281,6 +292,59 @@ ipcMain.handle('mcp:test-config', async (event, config) => {
     try {
         const result = await mcpManager.testServerConfig(config);
         return { success: true, connected: result };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+});
+
+// Auth / Store
+let store;
+
+ipcMain.handle('auth:save-token', async (event, token) => {
+    if (!store) {
+        const { default: Store } = await import('electron-store');
+        store = new Store();
+    }
+    store.set('github_token', token);
+    return true;
+});
+
+ipcMain.handle('auth:get-token', async () => {
+    if (!store) {
+        const { default: Store } = await import('electron-store');
+        store = new Store();
+    }
+    return store.get('github_token');
+});
+
+// Copilot Auth Handlers
+const CopilotAuthService = require('./copilot-auth-service');
+const copilotAuth = new CopilotAuthService();
+
+ipcMain.handle('auth:request-device-code', async (event, clientId) => {
+    try {
+        log('Auth', 'Requesting device code...');
+        return await copilotAuth.requestDeviceCode(clientId);
+    } catch (err) {
+        log('Auth', `Error requesting device code: ${err.message}`);
+        throw err;
+    }
+});
+
+ipcMain.handle('auth:poll-token', async (event, clientId, deviceCode, interval) => {
+    try {
+        log('Auth', 'Polling for token...');
+        return await copilotAuth.pollForToken(clientId, deviceCode, interval);
+    } catch (err) {
+        log('Auth', `Error polling for token: ${err.message}`);
+        throw err;
+    }
+});
+
+ipcMain.handle('mcp:call-tool', async (event, name, args) => {
+    try {
+        const result = await mcpManager.callTool(name, args);
+        return { success: true, result };
     } catch (err) {
         return { success: false, error: err.message };
     }

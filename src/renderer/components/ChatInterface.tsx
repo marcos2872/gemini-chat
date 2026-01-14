@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { ProvidersFactory } from '../providers/providers.factory';
+import { ProviderType } from '../providers/types';
+import type { ChatMessage } from '../providers/types';
+import { ModelSelector, ModelOption, ProviderGroup } from './ModelSelector';
+import { GitHubAuthModal } from './auth/GitHubAuthModal';
 
-interface Message {
-    role: 'user' | 'assistant' | 'system';
-    content: string;
-    timestamp: string;
+// Extend ChatMessage with MCP details if needed locally
+interface ExtendedMessage extends ChatMessage {
     mcpCalls?: Array<{
         server: string;
         input: string;
@@ -15,17 +18,29 @@ interface Message {
 
 interface ChatInterfaceProps {
     conversationId: string | null;
-    models: Array<{ name: string; displayName: string }>;
+    models: Array<{ name: string; displayName: string }>; 
     currentModel: string;
     onModelChange: (model: string) => void;
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models, currentModel, onModelChange }) => {
-    // ... (existing state) ...
-    const [messages, setMessages] = useState<Message[]>([]);
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: geminiModels, currentModel, onModelChange }) => {
+    // State
+    const [conversation, setConversation] = useState<any>(null); // Full conversation object
+    const [messages, setMessages] = useState<ExtendedMessage[]>([]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
+    
+    // Providers & Models
+    const [activeProviderType, setActiveProviderType] = useState<ProviderType>(ProviderType.GEMINI);
+    const [activeModelId, setActiveModelId] = useState<string>('gemini-2.5-flash-lite');
+    
+    const [copilotConnected, setCopilotConnected] = useState(false);
+    const [providerGroups, setProviderGroups] = useState<ProviderGroup[]>([]);
+
+    const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const factory = ProvidersFactory.getInstance();
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -35,13 +50,104 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models, c
         scrollToBottom();
     }, [messages]);
 
+    // Initialize Providers & Fetch Models
+    useEffect(() => {
+        const initProviders = async () => {
+             // 1. Initialize Gemini
+            await factory.initializeProvider(ProviderType.GEMINI); 
+            
+            // 2. Initialize Copilot (Persistence check)
+            let isCopilotReady = false;
+            try {
+                const savedToken = await window.electronAPI.getAuthToken();
+                if (savedToken) {
+                     await factory.initializeProvider(ProviderType.COPILOT, { accessToken: savedToken });
+                     isCopilotReady = true;
+                } else {
+                     await factory.initializeProvider(ProviderType.COPILOT);
+                }
+            } catch (e) {
+                 await factory.initializeProvider(ProviderType.COPILOT);
+            }
+            setCopilotConnected(isCopilotReady);
+
+            // 3. Build Groups
+            const groups: ProviderGroup[] = [];
+
+            // Gemini Group
+            const geminiProvider = factory.getProvider(ProviderType.GEMINI);
+            if (geminiProvider) {
+                const gModels = await geminiProvider.getModels();
+                groups.push({
+                    provider: ProviderType.GEMINI,
+                    displayName: 'Google AI',
+                    connected: true, // Always connected for now (or check API?)
+                    models: gModels.map(m => ({
+                        provider: ProviderType.GEMINI,
+                        id: m,
+                        displayName: m
+                    }))
+                });
+            }
+
+            // Copilot Group
+            const copilotProvider = factory.getProvider(ProviderType.COPILOT);
+            // We want to show the group even if disconnected, but with empty models (handled by ModelSelector logic)
+            // But ModelSelector expects models array.
+            // If disconnected, we pass empty array or full array?
+            // User requirement: "if disconnected show connect button". 
+            // So we can pass models if we have them (static list), but `connected: false` flag will override in UI.
+            
+            let cModels: string[] = [];
+            if (copilotProvider) {
+                 cModels = await copilotProvider.getModels();
+            }
+            
+            groups.push({
+                provider: ProviderType.COPILOT,
+                displayName: 'GitHub Copilot Chat',
+                connected: isCopilotReady,
+                models: cModels.map(m => ({
+                     provider: ProviderType.COPILOT,
+                     id: m,
+                     displayName: m === 'gpt-4' ? 'GPT-4' : (m === 'gpt-3.5-turbo' ? 'GPT-3.5 Turbo' : m)
+                }))
+            });
+            
+            setProviderGroups(groups);
+            
+            // Set initial active model from props
+            if (currentModel) {
+                 // Check if it's gemini
+                 // We need to flatten to find
+                 const allModels = groups.flatMap(g => g.models);
+                 const found = allModels.find(m => m.id === currentModel);
+                 if (found) {
+                     setActiveModelId(found.id);
+                     setActiveProviderType(found.provider);
+                     factory.setActiveProvider(found.provider);
+                 }
+            }
+        };
+        initProviders();
+    }, [currentModel, copilotConnected]); // Re-run if status changes
+
+    // Load Conversation
     useEffect(() => {
         if (!conversationId) return;
 
         const loadConversation = async () => {
             try {
                 const conv = await window.electronAPI.conversationLoad(conversationId);
-                setMessages(conv.messages || []);
+                setConversation(conv);
+                // Ensure messages match ExtendedMessage (add IDs if missing)
+                const msgs = (conv.messages || []).map((m: any) => ({
+                    ...m,
+                    id: m.id || crypto.randomUUID()
+                }));
+                // Try to restore provider from conversation metadata if saved? 
+                // For now, we keep current provider.
+                setMessages(msgs);
             } catch (err) {
                 console.error('Failed to load conversation:', err);
             }
@@ -49,39 +155,150 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models, c
         loadConversation();
     }, [conversationId]);
 
+    // Backend Updates Listener (Primary for Gemini)
+    useEffect(() => {
+        const handleUpdate = (updatedConversation: any) => {
+            if (updatedConversation.id === conversationId) {
+                setConversation(updatedConversation);
+                 const msgs = (updatedConversation.messages || []).map((m: any) => ({
+                    ...m,
+                    id: m.id || crypto.randomUUID()
+                }));
+                setMessages(msgs);
+                setLoading(false); // Assume done if update arrives (or check if last msg is assistant)
+            }
+        };
+
+        if (window.electronAPI.onConversationUpdate) {
+            window.electronAPI.onConversationUpdate(handleUpdate);
+        }
+    }, [conversationId]);
+
+
+    const handleModelSelection = async (option: ModelOption) => {
+        const provider = factory.getProvider(option.provider);
+        if (!provider) return;
+        
+        // 1. Check Auth/Availability
+        const available = await provider.isAvailable();
+        if (option.provider === ProviderType.COPILOT && !available) {
+             setIsAuthModalOpen(true);
+             return;
+        }
+        
+        // 2. Set Active States
+        factory.setActiveProvider(option.provider);
+        setActiveProviderType(option.provider);
+        setActiveModelId(option.id);
+        
+        // 3. Propagate to parent if Gemini (for compatibility)
+        if (option.provider === ProviderType.GEMINI) {
+            onModelChange(option.id);
+        }
+    };
+    
+    const handleConnectProvider = (provider: ProviderType) => {
+        if (provider === ProviderType.COPILOT) {
+            setIsAuthModalOpen(true);
+        }
+    };
+
+    const handleAuthSuccess = async (config: any) => {
+        await factory.initializeProvider(ProviderType.COPILOT, config);
+        
+        // Save Token
+        if (config.accessToken) {
+            try {
+                await window.electronAPI.saveAuthToken(config.accessToken);
+            } catch (e) {
+                console.error("Failed to save token", e);
+            }
+        }
+        
+        setCopilotConnected(true);
+        // Refresh 
+        factory.setActiveProvider(ProviderType.COPILOT);
+        setActiveProviderType(ProviderType.COPILOT);
+    };
+
     const handleSubmit = async () => {
-        // ... (existing submit logic) ...
         if (!input.trim() || loading) return;
 
-        const userMsg: Message = {
+        const userMsg: ExtendedMessage = {
+            id: crypto.randomUUID(),
             role: 'user',
             content: input,
             timestamp: new Date().toISOString()
         };
 
-        setMessages(prev => [...prev, userMsg]);
+        const provider = factory.getActiveProvider();
+        const updatedMessages = [...messages, userMsg];
+
         setInput('');
         setLoading(true);
 
+        const MANAGED_BY_BACKEND = provider.managesHistory;
+
+        if (!MANAGED_BY_BACKEND) {
+             setMessages(updatedMessages);
+        } else {
+             setMessages(updatedMessages);
+        }
+
         try {
-            const result = await window.electronAPI.sendPrompt(userMsg.content);
-            if (result.success && result.data) {
-                const assistantMsg: Message = {
+            // Create placeholder for assistant if using client-side streaming
+            let currentAssistantMsg: ExtendedMessage | null = null;
+            
+            if (!MANAGED_BY_BACKEND) {
+                 currentAssistantMsg = {
+                    id: crypto.randomUUID(),
                     role: 'assistant',
-                    content: result.data,
-                    timestamp: new Date().toISOString(),
-                    mcpCalls: result.mcpCalls
-                };
-                setMessages(prev => [...prev, assistantMsg]);
-            } else {
-                setMessages(prev => [...prev, {
-                    role: 'assistant',
-                    content: `Error: ${result.error || 'Unknown error'}`,
+                    content: '',
                     timestamp: new Date().toISOString()
-                }]);
+                };
+                setMessages([...updatedMessages, currentAssistantMsg]);
             }
-        } catch (err) {
+
+            let collectedContent = '';
+
+            // Handle Streaming
+            await provider.chatStream(
+                updatedMessages, 
+                (chunk) => {
+                    collectedContent += chunk;
+                    
+                    if (!MANAGED_BY_BACKEND && currentAssistantMsg) {
+                        currentAssistantMsg.content = collectedContent;
+                        // Force update
+                         setMessages(prev => {
+                            const newMsgs = [...prev];
+                            newMsgs[newMsgs.length - 1] = { ...currentAssistantMsg! };
+                            return newMsgs;
+                        });
+                    }
+                },
+                { model: activeModelId } // Pass selected model
+            );
+            
+            // Sync with backend ONLY if NOT managed by backend
+            if (!MANAGED_BY_BACKEND && conversation) {
+                if (currentAssistantMsg) {
+                    const finalMsgs = [...updatedMessages, { ...currentAssistantMsg, content: collectedContent }];
+                    const newConv = { ...conversation, messages: finalMsgs, updated: Date.now() };
+                    // Sync
+                    setConversation(newConv);
+                    await window.electronAPI.conversationSync(newConv);
+                }
+            }
+
+        } catch (err: any) {
             console.error(err);
+             setMessages(prev => [...prev, {
+                id: crypto.randomUUID(),
+                role: 'assistant',
+                content: `Error: ${err.message || 'Unknown error'}`,
+                timestamp: new Date().toISOString()
+            }]);
         } finally {
             setLoading(false);
         }
@@ -92,254 +309,100 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models, c
             handleSubmit();
         }
     };
-
-    const [approvalRequest, setApprovalRequest] = useState<{ toolName: string; args: any } | null>(null);
-
-    useEffect(() => {
-        const handleApproval = (data: { toolName: string; args: any }) => {
-            setApprovalRequest(data);
-        };
-
-        if (window.electronAPI.onApprovalRequest) {
-            window.electronAPI.onApprovalRequest(handleApproval);
-        }
-
-        // Custom event for setting input from other components
-        const handleSetInput = (e: CustomEvent) => {
-            setInput(e.detail);
-        };
-        window.addEventListener('set-chat-input', handleSetInput as EventListener);
-
-        return () => {
-            // Clean up both listeners? onApprovalRequest doesn't really have an off method exposed here easily without a ref, 
-            // but we should clean up the DOM listener
-            window.removeEventListener('set-chat-input', handleSetInput as EventListener);
-        };
-    }, []);
-
-    const handleApprovalResponse = (approved: boolean) => {
-        window.electronAPI.sendApprovalResponse(approved);
-        setApprovalRequest(null);
-    };
-
-    // Listen for real-time history updates (e.g. system messages from backend)
-    useEffect(() => {
-        if (window.electronAPI.onConversationUpdate) {
-            window.electronAPI.onConversationUpdate((updatedConversation: any) => {
-                if (updatedConversation.id === conversationId) {
-                    // We need to trigger a re-render/update
-                    // Update state directly with the payload
-                    setMessages(updatedConversation.messages);
-                }
-            });
-        }
-    }, [conversationId]); // Re-bind if ID changes
-
-    const formatContent = (content: string) => {
-        // System status messages
-        if (content.startsWith('✅') || content.startsWith('❌')) {
-            return content;
-        }
-
-        if (content.startsWith('Error:')) {
-            // Check for GoogleGenerativeAI specific errors
-            if (content.includes('[GoogleGenerativeAI Error]')) {
-                const match = content.match(/\[(4\d{2}[^\]]*)\] (.*?)(?:\.|$)/);
-                if (match) {
-                    return `⚠️ API Error (${match[1]})\n${match[2]}`;
-                }
-                // Fallback for simple 429
-                if (content.includes('429')) return "⚠️ Quota Exceeded. Please try again later.";
-            }
-
-            try {
-                // Try to see if it contains a JSON error
-                const jsonPart = content.replace(/^Error:\s*/, '');
-                if (jsonPart.trim().startsWith('{')) {
-                    const parsed = JSON.parse(jsonPart);
-                    return parsed.message || parsed.error?.message || jsonPart;
-                }
-                return jsonPart;
-            } catch (e) {
-                return content.replace(/^Error:\s*/, '');
-            }
-        }
+    
+         const formatContent = (content: string) => {
+        if (content.startsWith('✅') || content.startsWith('❌')) return content;
+        if (content.startsWith('Error:')) return content; // simplified
         return content;
     };
-
+    
     const CollapsibleLog = ({ content }: { content: string }) => {
         const [isExpanded, setIsExpanded] = useState(false);
-
-        let title = content;
-        let details = '';
-
-        if (content.includes('\nArgs:')) {
-            const parts = content.split('\nArgs:');
-            title = parts[0].trim();
-            details = parts[1].trim();
-        }
-
+        let title = content.split('\n')[0];
+        let details = content.substring(title.length);
         return (
             <div style={{ textAlign: 'left', margin: '0.5rem 0' }}>
-                <div
-                    onClick={() => setIsExpanded(!isExpanded)}
-                    style={{
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '0.9rem',
-                        color: title.startsWith('✅') ? '#4CAF50' : '#f44336'
-                    }}
-                >
-                    <span style={{ marginRight: '0.5rem' }}>{isExpanded ? '▼' : '▶'}</span>
-                    {title}
-                </div>
-                {isExpanded && details && (
-                    <pre style={{
-                        marginTop: '0.5rem',
-                        backgroundColor: '#1E1E1E',
-                        padding: '0.5rem',
-                        borderRadius: '4px',
-                        fontSize: '0.8rem',
-                        overflowX: 'auto',
-                        textAlign: 'left'
-                    }}>
-                        {details}
-                    </pre>
-                )}
+               <div onClick={() => setIsExpanded(!isExpanded)} style={{ cursor: 'pointer', color: title.startsWith('✅') ? '#4CAF50' : '#f44336' }}>
+                   {isExpanded ? '▼' : '▶'} {title}
+               </div>
+               {isExpanded && <pre style={{ backgroundColor: '#1E1E1E', padding: '0.5rem', marginTop: '0.5rem' }}>{details}</pre>}
             </div>
         );
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', position: 'relative' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', position: 'relative', backgroundColor: '#1E1E1E' }}>
+            
+            {/* Messages Area */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
-                {Array.isArray(messages) && messages.map((msg, idx) => (
+                {messages.map((msg, idx) => (
                     <div key={idx} style={{
                         marginBottom: '1rem',
                         alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                        backgroundColor: msg.role === 'user' ? '#2b2b2b' : (
-                            msg.role === 'system' ? 'rgba(76, 175, 80, 0.1)' : // Light green tint for system? Or maybe just transparent
-                                (msg.content.startsWith('Error:') ? 'rgba(255, 0, 0, 0.1)' : 'transparent')
-                        ),
-                        // For system messages, let's give them a subtle border or background to make them "look like a message"
-                        // but distinct. User said "like a chat message".
-                        // Assistant is transparent default (no bg). 
-                        // Let's make system messages have a slight background to distinguish, but left aligned.
-
-                        padding: msg.role === 'user' || msg.content.startsWith('Error:') || msg.role === 'system' ? '1rem' : '0',
-
+                        backgroundColor: msg.role === 'user' ? '#2b2b2b' : 'transparent',
+                        padding: msg.role === 'user' || msg.role === 'system' ? '1rem' : '0',
                         borderRadius: '8px',
-                        border: msg.content.startsWith('Error:') ? '1px solid #700' : (
-                            msg.role === 'system' ? '1px solid rgba(76, 175, 80, 0.3)' : 'none'
-                        ),
                         maxWidth: '80%',
-                        textAlign: 'left',
-                        fontStyle: 'normal',
-                        opacity: 1
+                        textAlign: 'left'
                     }}>
-                        {msg.role !== 'system' && (
-                            <strong style={{ color: msg.role === 'user' ? '#4B90F5' : (msg.content.startsWith('Error:') ? '#ff6b6b' : '#9DA5B4') }}>
-                                {msg.role === 'user' ? 'You' : (msg.content.startsWith('Error:') ? 'System Error' : 'Gemini')}
-                            </strong>
-                        )}
-                        <div style={{ whiteSpace: 'pre-wrap', marginTop: msg.role === 'system' ? '0' : '0.5rem', lineHeight: '1.5' }}>
-                            {msg.role === 'system' && (msg.content.startsWith('✅') || msg.content.startsWith('❌')) ? (
-                                <CollapsibleLog content={msg.content} />
-                            ) : (
-                                formatContent(msg.content)
-                            )}
+                        <strong style={{ color: msg.role === 'user' ? '#4B90F5' : '#9DA5B4' }}>
+                           {msg.role === 'user' ? 'You' : (msg.role === 'system' ? 'System' : (activeProviderType === ProviderType.COPILOT ? 'Copilot' : 'Gemini'))}
+                        </strong>
+                        <div style={{ whiteSpace: 'pre-wrap', marginTop: '0.5rem', lineHeight: '1.5' }}>
+                             {msg.role === 'system' ? <CollapsibleLog content={msg.content} /> : msg.content}
                         </div>
-                        {msg.mcpCalls && msg.mcpCalls.length > 0 && (
-                            <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: '#666' }}>
-                                {msg.mcpCalls.map((call, i) => (
-                                    <div key={i}>
-                                        ⚡ Used <strong>@{call.server}</strong> ({call.duration}ms)
-                                    </div>
-                                ))}
-                            </div>
-                        )}
                     </div>
                 ))}
-                {loading && <div style={{ padding: '1rem', fontStyle: 'italic', color: '#666' }}>Typing...</div>}
+                {loading && <div style={{ color: '#666' }}>Typing...</div>}
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* Approval Modal */}
-            {approvalRequest && (
-                <div style={{
-                    position: 'absolute', bottom: '80px', left: '20px', right: '20px',
-                    backgroundColor: '#1E1E1E', border: '1px solid #4CAF50', borderRadius: '8px',
-                    padding: '1rem', boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
-                    zIndex: 100
-                }}>
-                    <strong style={{ color: '#4CAF50', display: 'block', marginBottom: '0.5rem' }}>⚡ Tool Execution Requested</strong>
-                    <div style={{ marginBottom: '1rem', fontSize: '0.9rem' }}>
-                        Gemini wants to run <strong>{approvalRequest.toolName}</strong> with arguments:
-                        <pre style={{ backgroundColor: '#252526', padding: '0.5rem', borderRadius: '4px', overflowX: 'auto', marginTop: '0.5rem' }}>
-                            {JSON.stringify(approvalRequest.args, null, 2)}
-                        </pre>
-                    </div>
-                    <div style={{ display: 'flex', gap: '1rem' }}>
-                        <button onClick={() => handleApprovalResponse(true)} style={{
-                            backgroundColor: '#4CAF50', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold'
-                        }}>Allow</button>
-                        <button onClick={() => handleApprovalResponse(false)} style={{
-                            backgroundColor: '#ff6b6b', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer'
-                        }}>Deny</button>
-                    </div>
-                </div>
-            )}
-
-            <div style={{ padding: '1rem', borderTop: '1px solid #3E3E42', backgroundColor: '#1E1E1E' }}>
+            {/* Input Area */}
+            <div style={{ padding: '12px', borderTop: '1px solid #3E3E42', backgroundColor: '#1E1E1E' }}>
                 <textarea
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Type a message... (Ctrl+Enter to send)"
-                    style={{
-                        width: '100%',
-                        height: '80px',
-                        backgroundColor: '#1E1E1E',
-                        border: '1px solid #3E3E42',
-                        color: '#ECECEC',
-                        padding: '0.5rem',
-                        borderRadius: '4px',
-                        resize: 'none',
-                        outline: 'none',
-                        fontFamily: 'inherit'
-                    }}
+                    placeholder={`Message ${activeProviderType === ProviderType.COPILOT ? 'Copilot' : 'Gemini'}... (Ctrl+Enter)`}
+                    style={{ width: '100%', height: '80px', backgroundColor: '#252526', border: '1px solid #3E3E42', color: '#ECECEC', padding: '0.5rem', borderRadius: '6px' }}
                 />
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <select
-                            value={currentModel}
-                            onChange={(e) => onModelChange(e.target.value)}
-                            style={{
-                                backgroundColor: '#1E1E1E',
-                                color: '#ECECEC',
-                                border: '1px solid #3E3E42',
-                                borderRadius: '4px',
-                                padding: '4px 8px',
-                                outline: 'none'
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', alignItems: 'center' }}>
+                     {/* Model Selector Replacement */}
+                     <div style={{ display: 'flex', gap: '8px' }}>
+                         <ModelSelector 
+                            groups={providerGroups}
+                            currentModelId={activeModelId}
+                            activeProvider={activeProviderType}
+                            onSelectModel={handleModelSelection}
+                            onConnect={handleConnectProvider}
+                            onConfigure={() => {
+                                if (activeProviderType === ProviderType.COPILOT) setIsAuthModalOpen(true);
                             }}
-                        >
-                            {models.map(m => (
-                                <option key={m.name} value={m.name}>{m.displayName}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <button
-                        onClick={handleSubmit}
-                        className="primary-btn"
-                        style={{ padding: '8px 24px' }}
-                        disabled={loading}
-                    >
-                        Send
-                    </button>
+                         />
+                     </div>
+                     
+                     <div style={{ display: 'flex', gap: '8px' }}>
+                        {/* Send Button */}
+                         <button onClick={handleSubmit} disabled={loading} style={{ 
+                            padding: '6px 16px', 
+                            backgroundColor: '#007ACC', 
+                            color: 'white', 
+                            border: 'none', 
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontWeight: 600
+                         }}>
+                             Send
+                         </button>
+                     </div>
                 </div>
             </div>
+            
+            <GitHubAuthModal 
+                isOpen={isAuthModalOpen} 
+                onClose={() => setIsAuthModalOpen(false)} 
+                onAuthenticated={handleAuthSuccess} 
+            />
         </div>
     );
 };
