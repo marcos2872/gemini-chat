@@ -228,10 +228,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
         setActiveProviderType(option.provider);
         setActiveModelId(option.id);
 
-        // 3. Propagate to parent if Gemini (for compatibility)
-        if (option.provider === ProviderType.GEMINI) {
-            onModelChange(option.id);
-        }
+        // 3. Propagate to parent (for all providers to handle chat switching)
+        onModelChange(option.id);
     };
 
     const handleConnectProvider = async (provider: ProviderType, credential?: string) => {

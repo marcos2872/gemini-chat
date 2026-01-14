@@ -213,7 +213,12 @@ ipcMain.handle('gemini:prompt', async (event, prompt) => {
 
 ipcMain.handle('gemini:set-model', async (event, modelName) => {
     try {
-        await gemini.setModel(modelName);
+        if (modelName.startsWith('gemini') || modelName.startsWith('learnlm')) {
+            await gemini.setModel(modelName);
+        } else {
+            // Assume Copilot/Other
+            await copilotClient.setModel(modelName);
+        }
         return { success: true };
     } catch (err) {
         log('IPC', `Error setting model: ${err.message}`);
@@ -442,7 +447,7 @@ ipcMain.handle('copilot:chat-stream', async (event, { messages, model }) => {
         copilotClient.history = context.map(m => ({
             role: m.role,
             content: m.content,
-            timestamp: new Date().toISOString()
+            timestamp: m.timestamp || new Date().toISOString()
         }));
 
         console.log(`[Main] Forwarding prompt to Copilot: ${lastMsg.content.substring(0, 50)}...`);
@@ -501,6 +506,34 @@ ipcMain.handle('copilot:chat-stream', async (event, { messages, model }) => {
         if (win) {
             win.webContents.send('copilot:chunk', response);
         }
+
+        // --- Persistence Update ---
+        // 1. Add User Message to activeConversation (it wasn't added yet!)
+        const userMsg = {
+            id: crypto.randomUUID(),
+            role: 'user',
+            content: lastMsg.content,
+            timestamp: new Date().toISOString()
+        };
+        activeConversation.messages.push(userMsg);
+
+        // 2. Add Assistant Message
+        const assistantMsg = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: response,
+            timestamp: new Date().toISOString()
+        };
+        activeConversation.messages.push(assistantMsg);
+
+        // 3. Save
+        await storage.saveConversation(activeConversation);
+
+        // 4. Notify UI of full update (so history sidebar updates too)
+        if (win) {
+            win.webContents.send('conversation:update', activeConversation);
+        }
+        // --------------------------
 
         return { success: true };
     } catch (err) {
