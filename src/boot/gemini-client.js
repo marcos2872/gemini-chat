@@ -295,13 +295,21 @@ class GeminiClient {
                     try {
                         const json = JSON.parse(data);
                         if (json.models) {
+                            const allowedModels = [
+                                'gemini-2.5-flash',
+                                'gemini-2.5-flash-lite',
+                                'gemini-2.5-pro',
+                                'gemini-3-flash-preview',
+                                'gemini-3-pro-preview'
+                            ];
+
                             const validModels = json.models
                                 .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
-                                .filter(m => !m.name.includes('vision') && !m.name.includes('image') && !m.name.includes('nano')) // Exclude vision, image, and nano models
                                 .map(m => ({
                                     name: m.name.replace('models/', ''),
                                     displayName: m.displayName || m.name.replace('models/', '')
-                                }));
+                                }))
+                                .filter(m => allowedModels.includes(m.name));
                             resolve(validModels);
                         } else {
                             console.warn('[Gemini] Unexpected response listing models:', json);
