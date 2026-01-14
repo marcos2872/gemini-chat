@@ -4,7 +4,7 @@
         "module": "CommonJS",
         "moduleResolution": "Node",
         "outDir": "dist/main",
-        "rootDir": "src/boot",
+        "rootDir": "./src",
         "strict": false,
         "esModuleInterop": true,
         "skipLibCheck": true,
@@ -12,9 +12,7 @@
         "resolveJsonModule": true
     },
     "include": [
-        "src/boot/**/*"
-    ],
-    "exclude": [
-        "src/renderer"
+        "./src/boot/**/*",
+        "./src/shared/**/*"
     ]
 }

@@ -2,10 +2,10 @@
   "name": "gemini-desktop",
   "version": "1.0.0",
   "description": "",
-  "main": "dist/main/main.js",
+  "main": "dist/main/boot/main.js",
   "scripts": {
     "start": "npm run build:main && electron .",
-    "dev": "concurrently -k \"cross-env IS_DEV=true vite\" \"npm run build:main -- -w\" \"wait-on http://localhost:3000 dist/main/main.js && cross-env IS_DEV=true electron .\"",
+    "dev": "concurrently -k \"cross-env IS_DEV=true vite\" \"npm run build:main -- -w\" \"wait-on http://localhost:3000 dist/main/boot/main.js && cross-env IS_DEV=true electron .\"",
     "build:main": "tsc -p tsconfig.main.json",
     "build": "npm run build:main && vite build",
     "watch": "vite build --watch"
