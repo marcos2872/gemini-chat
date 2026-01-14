@@ -94,6 +94,7 @@ ipcMain.handle('ping', () => 'pong');
 
 // Gemini Handlers
 ipcMain.handle('gemini:prompt', async (event, prompt) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
     try {
         log('IPC', `Received prompt: ${prompt.substring(0, 50)}...`);
 
@@ -151,6 +152,11 @@ ipcMain.handle('gemini:prompt', async (event, prompt) => {
             });
         });
 
+        console.log(`[Main] Gemini response length: ${response ? response.length : 'null'}`);
+        if (!response) {
+            console.warn('[Main] Gemini returned empty response!');
+        }
+
         // Add Assistant Message
         const assistantMsg = {
             id: crypto.randomUUID(),
@@ -164,15 +170,26 @@ ipcMain.handle('gemini:prompt', async (event, prompt) => {
         // Auto-save
         await storage.saveConversation(activeConversation);
 
+        if (win) {
+            win.webContents.send('conversation:update', activeConversation);
+        }
+
         return { success: true, data: response, conversationId: activeConversation.id };
     } catch (err) {
         log('IPC', `Error processing prompt: ${err.message}`);
 
         // Add Error Message to History
+        let cleanError = err.message;
+        if (cleanError.includes('429') || cleanError.includes('Quota exceeded')) {
+            cleanError = "⚠️ **Quota Exceeded**\nYou have reached the free tier limit for Gemini requests. The system will automatically retry, but if this persists, please try again later or switch models.";
+        } else {
+            cleanError = `❌ **Error**: ${cleanError}`;
+        }
+
         const errorMsg = {
             id: crypto.randomUUID(),
             role: 'assistant', // Use assistant role so it renders in the chat flow
-            content: `Error: ${err.message}`, // Prefix with Error: for styling
+            content: cleanError,
             timestamp: new Date().toISOString()
         };
         activeConversation.messages.push(errorMsg);
@@ -180,13 +197,12 @@ ipcMain.handle('gemini:prompt', async (event, prompt) => {
         // Save and Notify
         await storage.saveConversation(activeConversation);
 
-        const win = BrowserWindow.getAllWindows()[0];
         if (win) {
             win.webContents.send('conversation:update', activeConversation);
         }
 
-        // Return false so UI knows it failed (though it might just re-render via update)
-        return { success: false, error: err.message };
+        // Return success so frontend doesn't double-render the error
+        return { success: true, isError: true };
     }
 });
 
@@ -418,8 +434,55 @@ ipcMain.handle('copilot:chat-stream', async (event, { messages, model }) => {
 
         console.log(`[Main] Forwarding prompt to Copilot: ${lastMsg.content.substring(0, 50)}...`);
 
+        // Connect MCP servers if not already connected (best effort)
+        await mcpManager.connectAll();
+
         // Use sendPrompt (non-streaming for now, but simulating stream for frontend compatibility)
-        const response = await copilotClient.sendPrompt(lastMsg.content);
+        const response = await copilotClient.sendPrompt(lastMsg.content, mcpManager, async (toolName, args) => {
+            // Approval Callback (Reused from Gemini logic)
+            return new Promise((resolve) => {
+                const win = BrowserWindow.getAllWindows()[0];
+                if (!win) {
+                    resolve(true);
+                    return;
+                }
+
+                log('IPC', `Asking approval for ${toolName} (Copilot)`);
+                win.webContents.send('gemini:approval-request', { toolName, args });
+
+                // One-time listener for response
+                // Note: If multiple requests happen, this might overlap. Ideally use unique IDs.
+                // Assuming sequential:
+                ipcMain.once('gemini:approval-response', (event, { approved }) => {
+                    log('IPC', `Approval received: ${approved}`);
+
+                    // We don't save statusMsg to activeConversation here because CopilotClient manages its own history 
+                    // loop inside sendPrompt separately from the generic activeConversation, IF we consider it separate.
+                    // However, we SHOULD update the UI.
+
+                    if (win) {
+                        // Notify UI of 'status' message if we want to show it in chat
+                        // But frontend expects messages via 'copilot:chunk' or state updates.
+                        // Currently Copilot frontend doesn't listen to 'conversation:update' as primary source?
+                        // Actually ChatInterface listens to `onConversationUpdate`.
+                        // But we haven't pushed the user message to activeConversation yet in this handler!
+                        // Let's check logic above.
+
+                        // We extracted prompt but didn't push to activeConversation in this handler.
+                        // Frontend manages history for Copilot (managesHistory = false in provider).
+                        // Wait, CopilotProvider.ts has managesHistory = false. 
+                        // So frontend *is* managing messages.
+
+                        // If frontend manages messages, it shows the logs via `ExtendedMessage` maybe?
+                        // `ChatInterface` listens to `gemini:approval-request` which is global.
+                    }
+
+                    resolve(approved);
+                });
+            });
+        });
+
+        console.log(`[Main] Copilot response length: ${response ? response.length : 'null'}`);
 
         // Send as one chunk since we are not streaming in the new client yet
         if (win) {

@@ -7,14 +7,17 @@ export class CopilotService {
   constructor() {
     // Listen for chunks from the main process
     if (window.electronAPI?.onCopilotChunk) {
-      window.electronAPI.onCopilotChunk((chunk) => {
-        console.log("[CopilotService] Received chunk:", chunk);
-        if (this.currentChunkHandler) {
-          this.currentChunkHandler(chunk);
-        } else {
-          console.warn("[CopilotService] No chunk handler assigned!");
-        }
-      });
+      if (window.electronAPI?.onCopilotChunk) {
+        window.electronAPI.onCopilotChunk((chunk) => {
+          console.log("[CopilotService] Received chunk:", chunk);
+          if (this.currentChunkHandler) {
+            console.log("[CopilotService] Invoking currentChunkHandler");
+            this.currentChunkHandler(chunk);
+          } else {
+            console.warn("[CopilotService] No chunk handler assigned!");
+          }
+        });
+      }
     }
   }
 
@@ -75,10 +78,12 @@ export class CopilotService {
     const model = options?.model || "gpt-4o";
 
     try {
+      console.log("[CopilotService] Calling backend chatStream...");
       const result = await window.electronAPI.copilotChatStream(
         messages,
         model
       );
+      console.log("[CopilotService] Backend call returned:", result);
 
       if (!result.success) {
         throw new Error(result.error || "Unknown error during chat stream");

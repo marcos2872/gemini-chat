@@ -4,6 +4,7 @@ import { ProviderType } from '../providers/types';
 import type { ChatMessage } from '../providers/types';
 import { ModelSelector, ModelOption, ProviderGroup } from './ModelSelector';
 import { GitHubAuthModal } from './auth/GitHubAuthModal';
+import { ApprovalModal } from './ApprovalModal';
 
 // Extend ChatMessage with MCP details if needed locally
 interface ExtendedMessage extends ChatMessage {
@@ -38,6 +39,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
     const [providerGroups, setProviderGroups] = useState<ProviderGroup[]>([]);
 
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
+    // Approval Modal State
+    const [approvalRequest, setApprovalRequest] = useState<{ toolName: string; args: any } | null>(null);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const factory = ProvidersFactory.getInstance();
@@ -140,7 +144,34 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
             }
         };
         initProviders();
+
+        // Setup Approval Listener
+        const cleanupApproval = window.electronAPI.onApprovalRequest((data: { toolName: string; args: any }) => {
+            console.log('[ChatInterface] Approval requested:', data);
+            setApprovalRequest(data);
+        });
+
+        // We assume onApprovalRequest returns a cleanup function if it uses EventEmitter. 
+        // If not, we might be stacking listeners if this effect re-runs. 
+        // But checking preload.js, ipcRenderer.on returns 'this' usually, but our wrapper calls callback.
+        // The wrapper ipcRenderer.on(...) returns disposable in newer Electron, but in preload.js:
+        // onApprovalRequest: (callback) => ipcRenderer.on(..., (...) => callback(...))
+        // This actually adds a listener every time initProviders runs. 
+        // Since initProviders is inside useEffect deps [currentModel, copilotConnected], it might re-run.
+        // Ideally we move this listener to a separate useEffect [] once.
+
     }, [currentModel, copilotConnected]); // Re-run if status changes
+
+    // Separate effect for global listeners
+    useEffect(() => {
+        const cleanupApproval = window.electronAPI.onApprovalRequest((data: { toolName: string; args: any }) => {
+            console.log('[ChatInterface] Approval requested:', data);
+            setApprovalRequest(data);
+        });
+        // Note: The current preload implementation doesn't return an unsubscribe easily.
+        // We should just accept it for now or refactor preload.
+        // Assuming this component mounts once or rarely re-mounts.
+    }, []);
 
     // Load Conversation
     useEffect(() => {
@@ -168,12 +199,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
     // Backend Updates Listener (Primary for Gemini)
     useEffect(() => {
         const handleUpdate = (updatedConversation: any) => {
+            console.log('[ChatInterface] Received conversation update:', updatedConversation.id, 'Current:', conversationId);
             if (updatedConversation.id === conversationId) {
+                console.log('[ChatInterface] Updating conversation state from backend.');
                 setConversation(updatedConversation);
                 const msgs = (updatedConversation.messages || []).map((m: any) => ({
                     ...m,
                     id: m.id || crypto.randomUUID()
                 }));
+                console.log('[ChatInterface] New messages count:', msgs.length);
                 setMessages(msgs);
                 setLoading(false); // Assume done if update arrives (or check if last msg is assistant)
             }
@@ -386,6 +420,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
         // Simple logic for now.
     };
 
+    const handleApprovalResponse = (approved: boolean) => {
+        window.electronAPI.sendApprovalResponse(approved);
+        setApprovalRequest(null);
+    };
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', position: 'relative', backgroundColor: '#1E1E1E' }}>
 
@@ -459,6 +498,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
                 isOpen={isAuthModalOpen}
                 onClose={() => setIsAuthModalOpen(false)}
                 onAuthenticated={handleAuthSuccess}
+            />
+
+            <ApprovalModal
+                isOpen={!!approvalRequest}
+                toolName={approvalRequest?.toolName || ''}
+                args={approvalRequest?.args}
+                onApprove={() => handleApprovalResponse(true)}
+                onDeny={() => handleApprovalResponse(false)}
             />
         </div>
     );

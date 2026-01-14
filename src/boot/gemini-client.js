@@ -58,7 +58,7 @@ class GeminiClient {
         this.apiKey = key;
         await this.initialize(key);
     }
-    
+
     isConfigured() {
         return !!this.apiKey;
     }
@@ -121,7 +121,7 @@ class GeminiClient {
 
             console.log(`[Gemini] Sending prompt with ${tools.length} tools...`);
 
-            let result = await this.chat.sendMessage(prompt);
+            let result = await this._callWithRetry(() => this.chat.sendMessage(prompt));
             let response = result.response;
             let text = response.text();
 
@@ -174,7 +174,7 @@ class GeminiClient {
 
                     // Send tool results back to model
                     console.log('[Gemini] Sending tool outputs to model...');
-                    result = await this.chat.sendMessage(toolParts);
+                    result = await this._callWithRetry(() => this.chat.sendMessage(toolParts));
                     response = result.response;
                     text = response.text();
                     turn++;
@@ -190,6 +190,29 @@ class GeminiClient {
         } catch (error) {
             console.error('[Gemini] Error sending message:', error);
             throw error;
+        }
+    }
+
+    /**
+     * Retry helper for API calls (handling 429s)
+     */
+    async _callWithRetry(fn, retries = 3, delay = 2000) {
+        let attempt = 0;
+        while (attempt < retries) {
+            try {
+                return await fn();
+            } catch (error) {
+                const isQuotaError = error.message.includes('429') || error.message.includes('Quota exceeded');
+                if (isQuotaError && attempt < retries - 1) {
+                    // Extract retry delay if possible, or backoff
+                    console.warn(`[Gemini] Rate limit hit (429). Retrying in ${delay}ms... (Attempt ${attempt + 1}/${retries})`);
+                    await new Promise(r => setTimeout(r, delay));
+                    delay *= 2; // Exponential backoff
+                    attempt++;
+                } else {
+                    throw error;
+                }
+            }
         }
     }
 
@@ -230,7 +253,7 @@ class GeminiClient {
         if (!clean.type && clean.properties) {
             clean.type = 'OBJECT';
         }
-        
+
         // Capitalize types for Gemini (older API requirement, good practice)
         if (clean.type && typeof clean.type === 'string') {
             clean.type = clean.type.toUpperCase();
