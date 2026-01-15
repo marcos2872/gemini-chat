@@ -12,10 +12,7 @@ export class CopilotAuth {
   private clientId: string;
 
   constructor() {
-    this.clientId = import.meta.env.VITE_GITHUB_CLIENT_ID || "";
-    if (!this.clientId) {
-      console.warn("[CopilotAuth] VITE_GITHUB_CLIENT_ID is missing");
-    }
+    this.clientId = "Iv1.b507a08c87ecfe98";
   }
 
   async requestDeviceCode(): Promise<DeviceCodeResponse> {

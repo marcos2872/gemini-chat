@@ -17,21 +17,74 @@ const DEFAULT_HEADERS = {
  */
 
 export class CopilotClient {
-    private accessToken: string | null;
+    private oauthToken: string | null;
+    private apiToken: string | null;
+    private apiEndpoint: string | null;
+    private tokenExpiresAt: number;
     public modelName: string;
-    public history: any[]; // Made public or accessor used? getHistory() exists.
+    public history: any[];
     private timeoutMs: number;
 
     constructor() {
-        this.accessToken = null;
+        this.oauthToken = null;
+        this.apiToken = null;
+        this.apiEndpoint = null;
+        this.tokenExpiresAt = 0;
         this.modelName = 'gpt-4o'; // Default to a standard model
         this.history = [];
         this.timeoutMs = 30000;
     }
 
-    initialize(accessToken: string) {
-        this.accessToken = accessToken;
+    async initialize(oauthToken: string) {
+        this.oauthToken = oauthToken;
+        await this.exchangeToken();
         console.log(`[Copilot] Initialized with model: ${this.modelName}`);
+    }
+
+    private async exchangeToken() {
+        if (!this.oauthToken) throw new Error("No OAuth token provided");
+
+        // Simple check if existing token is valid (e.g. valid for 25 mins, refresh every 25? Token usually valid for 30m)
+        if (this.apiToken && Date.now() < this.tokenExpiresAt) return;
+
+        console.log("[CopilotClient] Exchanging OAuth token for API Token...");
+        try {
+            const response = await fetch("https://api.github.com/copilot_internal/v2/token", {
+                headers: {
+                    ...DEFAULT_HEADERS,
+                    "Authorization": `token ${this.oauthToken}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Token exchange failed: ${response.status}`);
+            }
+
+            const data = await response.json();
+            if (!data.token || !data.endpoints?.api) {
+                // Fallback or strict check? Usually 'token' is the key (it's actually 'token' field in JSON? or 'access_token'?)
+                // GitHub Copilot returned JSON often has `token` (the api key) and `expires_at`.
+                // Let's assume standard Copilot response structure.
+                // Actually COPILOT_CHAT_URLS.md says: expects JSON containing api_endpoint and api_key.
+                // Let's inspect data structure based on common knowledge or just use what we get.
+                // Returing data usually: { token: "...", endpoints: { api: "..." }, expires_at: ... }
+            }
+
+            // Adjust based on typical Zed/VSCode implementations:
+            // data.token is the API Key.
+            // data.endpoints.api is the base URL.
+
+            this.apiToken = data.token;
+            // Ensure endpoint doesn't have trailing slash
+            this.apiEndpoint = data.endpoints?.api?.replace(/\/$/, '') || "https://api.githubcopilot.com";
+            this.tokenExpiresAt = (data.expires_at || (Date.now() / 1000 + 1500)) * 1000; // default 25 min
+
+            console.log(`[CopilotClient] Token exchanged. Endpoint: ${this.apiEndpoint}`);
+
+        } catch (error: any) {
+            console.error("[CopilotClient] Token exchange error:", error.message);
+            throw error;
+        }
     }
 
     async setApiKey(key: string) {
@@ -39,14 +92,14 @@ export class CopilotClient {
     }
 
     isConfigured() {
-        return !!this.accessToken;
+        return !!this.oauthToken;
     }
 
     /**
      * Verify if the token is valid by fetching user info
      */
     async validateConnection() {
-        if (!this.accessToken) return false;
+        if (!this.oauthToken) return false;
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -55,7 +108,7 @@ export class CopilotClient {
                 method: 'GET',
                 headers: {
                     ...DEFAULT_HEADERS,
-                    Authorization: `Bearer ${this.accessToken}`
+                    "Authorization": `Bearer ${this.oauthToken}`
                 },
                 signal: controller.signal
             });
@@ -82,21 +135,27 @@ export class CopilotClient {
      * @returns {Promise<Array<{name: string, displayName: string}>>}
      */
     async listModels() {
-        if (!this.accessToken) return [];
+        if (!this.oauthToken) return [];
 
         try {
-            console.log("[CopilotClient] Fetching models from catalog...");
+            await this.exchangeToken();
+        } catch (e) {
+            console.warn("[CopilotClient] Token exchange failed during listModels:", e);
+            return [];
+        }
+
+        try {
+            console.log("[CopilotClient] Fetching models...");
 
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
-            const response = await fetch(GITHUB_MODELS_CATALOG_URL, {
+            const response = await fetch(`${this.apiEndpoint}/models`, {
                 method: 'GET',
                 headers: {
                     ...DEFAULT_HEADERS,
-                    "Authorization": `Bearer ${this.accessToken}`,
-                    "Accept": "application/vnd.github+json",
-                    "X-GitHub-Api-Version": "2022-11-28"
+                    "Authorization": `Bearer ${this.apiToken}`,
+                    "Copilot-Integration-Id": "vscode-chat"
                 },
                 signal: controller.signal
             });
@@ -110,13 +169,28 @@ export class CopilotClient {
 
             const data = await response.json();
 
-            if (Array.isArray(data)) {
-                return data.map((m: any) => ({
-                    name: m.id || m.name,
-                    displayName: m.name || m.id
-                }));
-            }
-            return [];
+            // Expected format: { data: [...] } or just [...]?
+            // Usually { data: [...] } for /models endpoint in OpenAI style, but Copilot might differ.
+            // Documentation says "JSON com a lista de modelos".
+            // Let's handle both.
+            const models = Array.isArray(data) ? data : (data.data || []);
+
+            // Filter
+            const validModels = models.filter((m: any) => {
+                // model_picker_enabled === true
+                if (m.model_picker_enabled !== true) return false;
+                // capabilities.type === "chat"
+                if (m.capabilities?.type !== "chat") return false;
+                // policy.state === "enabled"
+                if (m.policy?.state !== "enabled") return false;
+                return true;
+            });
+
+            return validModels.map((m: any) => ({
+                name: m.id || m.name,
+                displayName: m.name || m.id
+            }));
+
         } catch (error: any) {
             console.warn("[CopilotClient] Failed to fetch models:", error.message);
             return [];
@@ -131,7 +205,8 @@ export class CopilotClient {
      * @returns {Promise<string>}
      */
     async sendPrompt(prompt: string, mcpManager: any, onApproval: any) {
-        if (!this.accessToken) throw new Error("Not authenticated");
+        if (!this.oauthToken) throw new Error("Not authenticated");
+        await this.exchangeToken();
 
         this._addToHistory('user', prompt);
 
@@ -172,14 +247,13 @@ export class CopilotClient {
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
-                const response = await fetch(GITHUB_INFERENCE_URL, {
+                const response = await fetch(`${this.apiEndpoint}/chat/completions`, {
                     method: 'POST',
                     headers: {
                         ...DEFAULT_HEADERS,
-                        "Authorization": `Bearer ${this.accessToken}`,
+                        "Authorization": `Bearer ${this.apiToken}`,
                         "Content-Type": "application/json",
-                        "Accept": "application/vnd.github+json",
-                        "X-GitHub-Api-Version": "2022-11-28"
+                        "Copilot-Integration-Id": "vscode-chat"
                     },
                     body: JSON.stringify(payload),
                     signal: controller.signal
