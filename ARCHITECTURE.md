@@ -1,105 +1,164 @@
-# Arquitetura do Gemini Desktop
+# Arquitetura do IA-Chat
 
-Este documento descreve a arquitetura de alto nível do aplicativo **Gemini Desktop** e detalha os fluxos de dados para interações de chat padrão e interações envolvendo o Model Context Protocol (MCP).
+Este documento descreve a arquitetura de alto nível do aplicativo **IA-Chat** e detalha os fluxos de dados para interações com múltiplos modelos (Gemini e Copilot) e o uso do Model Context Protocol (MCP).
 
 ## Visão Geral
 
-O aplicativo é construído sobre o framework **Electron**, utilizando uma arquitetura de processos múltiplos:
+O aplicativo é construído sobre o framework **Electron**, utilizando uma arquitetura de processos múltiplos com **TypeScript** em toda a stack:
 
-*   **Processo Main (Node.js)**: Gerencia o ciclo de vida da aplicação, interações com o sistema operacional, persistência de dados (armazenamento de conversas), e orquestra as comunicações com a API do Gemini e servidores MCP.
-*   **Processo Renderer (React + Vite)**: Responsável pela interface do usuário (UI), exibindo o chat, histórico e painel de controle MCP. A comunicação com o processo Main ocorre via **IPC** (Inter-Process Communication).
+*   **Processo Main (Node.js)**: Gerencia o ciclo de vida da aplicação, orquestra a comunicação entre serviços (Gemini, Copilot, MCP) e mantém o estado da aplicação. Foi refatorado para utilizar o padrão **Controller-Service**.
+*   **Processo Renderer (React + Vite)**: Interface do usuário moderna e responsiva. Comunica-se com o Main exclusivamente através de um **IPC Bridge** tipado.
 
-### Componentes Chave
+### Componentes Chave (Main Process)
 
-*   **`src/boot/main.js`**: Ponto de entrada do processo Main. Configura os handlers IPC.
-*   **`src/boot/gemini-client.js`**: Wrapper em torno do Google Generative AI SDK. Gerencia sessões de chat e o loop de execução de ferramentas.
-*   **`src/boot/mcp-manager.js`**: Gerencia conexões com servidores MCP, descoberta de ferramentas/recursos e execução de chamadas.
-*   **`src/renderer/components/ChatInterface.tsx`**: Componente principal da UI de chat.
+A arquitetura do processo Main foi modularizada para melhor escalabilidade:
+
+*   **`src/boot/main.ts`**: Ponto de entrada. Inicializa serviços e injeta dependências nos controladores.
+*   **`src/boot/lib/IpcRouter.ts`**: Roteador central que despacha mensagens IPC para os handlers registrados.
+*   **Controladores (`src/boot/controllers/`)**:
+    *   **`GeminiController`**: Gerencia interações com a API do Google Gemini.
+    *   **`AuthController`**: Gerencia autenticação OAuth (Copilot) e tokens.
+    *   **`McpController`**: Gerencia configuração e testes de servidores MCP.
+*   **Serviços de Domínio**:
+    *   **`src/boot/gemini-client.ts`**: Cliente para o Google Generative AI SDK.
+    *   **`src/boot/copilot-client.ts`**: Cliente reverso para a API interna do GitHub Copilot (Token Exchange, Chat).
+    *   **`src/boot/mcp/McpService.ts`**: Serviço central para gerenciamento de conexões MCP (substitui o antigo `mcp-manager`).
+*   **`src/boot/conversation-storage.ts`**: Persistência de dados local (arquivos JSON).
 
 ---
 
 ## Fluxos de Execução
 
-### 1. Fluxo de Chat Padrão (Sem Ferramentas)
+## Fluxos de Execução
 
-Este é o fluxo básico quando o usuário envia uma mensagem e o modelo responde apenas com seu conhecimento interno.
+### 1. Inicialização e Autenticação
+
+Como cada provedor lida com a conexão inicial e listagem de modelos.
+
+#### A. GitHub Copilot (OAuth + Token Exchange)
+Fluxo complexo que envolve autorização no navegador e troca de tokens para acesso à API interna.
 
 ```mermaid
 sequenceDiagram
-    actor User as Usuário
-    participant UI as ChatInterface (Renderer)
-    participant IPC as IPC Bridge
-    participant Main as Main Process
-    participant Gemini as GeminiClient
-    participant API as Google Gemini API
+    participant User
+    participant Auth as AuthController
+    participant Client as CopilotClient
+    participant GH as GitHub API
 
-    User->>UI: Digita mensagem e envia
-    UI->>IPC: send-prompt (mensagem)
-    IPC->>Main: ipcMain.handle('gemini:send-prompt')
-    Main->>Gemini: sendPrompt(mensagem)
-    Gemini->>API: chat.sendMessage(mensagem)
-    API-->>Gemini: Gerar Resposta (Texto)
-    Gemini-->>Main: Retorna texto
-    Main->>IPC: Retorna sucesso + dados
-    IPC-->>UI: Atualiza estado (exibe resposta)
-    UI-->>User: Vê a resposta
+    Note over User, GH: Autenticação
+    User->>Auth: Solicita Login
+    Auth->>GH: Request Device Code
+    GH-->>Auth: Retorna Código + URL
+    Auth->>User: Exibe Código para colar no Browser
+    
+    loop Polling
+        Auth->>GH: Verifica status (POST /oauth/token)
+    end
+    
+    GH-->>Auth: Retorna OAuth Token
+    Auth->>Client: initialize(oauthToken)
+    
+    Note over Client, GH: Listagem de Modelos
+    Client->>GH: Exchange Token (OAuth -> API Token)
+    GH-->>Client: Retorna API Token + Endpoints
+    Client->>GH: GET /models (com API Token)
+    GH-->>Client: Lista de Modelos (gpt-4o, claude-3.5, etc)
+    Client-->>User: Atualiza lista na UI
 ```
 
-### 2. Fluxo de Chat com MCP (Tool Use)
-
-Este fluxo ocorre quando o Gemini decide que precisa usar uma ferramenta (ex: listar arquivos, ler recursos) para responder à solicitação do usuário. O aplicativo implementa um "loop de execução" para processar chamadas de função sequencialmente.
+#### B. Google Gemini (API Key)
+Fluxo simplificado baseada em chave de API (arquivo `.env` ou Input do usuário).
 
 ```mermaid
 sequenceDiagram
-    actor User as Usuário
-    participant UI as ChatInterface (Renderer)
-    participant Main as Main Process
-    participant Gemini as GeminiClient
-    participant API as Google Gemini API
-    participant MCP as MCPServerManager
-    participant Server as Servidor MCP (ex: Filesystem)
+    participant User
+    participant Controller as GeminiController
+    participant Client as GeminiClient
+    participant Google as Google AI API
 
-    User->>+UI: "Liste os arquivos na minha pasta"
-    UI->>+Main: send-prompt
-    Main->>+Gemini: sendPrompt(prompt, tools)
+    User->>Controller: Inicia App / Salva Chave
+    Controller->>Client: initialize(apiKey)
     
-    Note over Gemini, API: Envia prompt + definições de ferramentas MCP
-    Gemini->>+API: chat.sendMessage(prompt)
+    Client->>Google: GET /models (check connection)
     
-    API-->>-Gemini: FunctionCallRequest (nome: "ls", args: {path: "."})
+    alt Sucesso
+        Google-->>Client: Lista de Modelos (gemini-1.5, etc)
+        Client-->>User: Conectado + Lista de Modelos
+    else Falha
+        Google-->>Client: Erro 403/400
+        Client-->>User: Solicita nova chave
+    end
+```
+
+### 2. Fluxo de Chat Genérico (com MCP)
+
+Tanto o Gemini quanto o Copilot compartilham a **mesma arquitetura** para processamento de chat e uso de ferramentas (MCP). O **ChatProvider** serve como uma abstração para qualquer modelo.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as ChatInterface
+    participant Main as MainController
+    participant Provider as ModelProvider (Gemini/Copilot)
+    participant MCP as McpService
+    participant Tool as Ferramenta (Filesystem/Browser)
+    participant API as LLM API (Google/GitHub)
+
+    User->>UI: Envia: "Analise o arquivo data.csv"
+    UI->>Main: IPC: chat-stream(msg)
+    Main->>Provider: sendPrompt(msg)
     
-    loop Tool Execution Loop
-        Gemini->>UI: Solicita Aprovação (Optional)
-        UI-->>Gemini: Aprovado
+    Note over Provider, MCP: Injeção de Contexto
+    Provider->>MCP: getTools()
+    MCP-->>Provider: Definição das Tools (JSON Schema)
+    
+    Provider->>API: Envia Prompt + Definições de Tools
+    
+    loop Loop de Execução (ReAct / Function Calling)
+        API-->>Provider: Resposta: CallTool("read_file", path="data.csv")
         
-        Gemini->>+MCP: callTool("filesystem__ls", args)
-        MCP->>+Server: Executa comando/ferramenta
-        Server-->>-MCP: Retorna Resultado (JSON/Texto)
-        MCP-->>-Gemini: Resultado da Ferramenta
+        Provider->>UI: Request Approval
+        UI-->>User: "Permitir leitura de data.csv?"
+        User-->>Provider: Aprovar
         
-        Note over Gemini, API: Envia resultado da ferramenta de volta ao modelo
-        Gemini->>+API: chat.sendMessage(toolResult)
+        Provider->>MCP: callTool("read_file", args)
+        MCP->>Tool: Lê o arquivo no disco
+        Tool-->>MCP: Conteúdo do arquivo
+        MCP-->>Provider: ToolResult
         
-        alt Modelo precisa de mais ferramentas?
-            API-->>Gemini: FunctionCallRequest (Outra ferramenta...)
-            Note over Gemini: O loop continua...
+        Provider->>API: Envia ToolResult de volta ao modelo
+        
+        alt Modelo decide continuar
+            API-->>Provider: CallTool("analyze_data", ...)
         else Resposta Final
-            API-->>-Gemini: Resposta em Texto Natural
+            API-->>Provider: Texto Final ("O arquivo contém...")
         end
     end
     
-    Gemini-->>-Main: Resposta Final Processada
-    Main-->>-UI: Exibe resposta final
-    UI-->>-User: Vê a lista de arquivos formatada
+    Provider-->>UI: Stream de Resposta Final
+    UI-->>User: Exibe resposta
 ```
 
-## Estrutura de Diretórios Importante
+## Estrutura de Diretórios Atualizada
 
-*   `.gemini/`: Armazena configurações globais e logs.
-*   `src/conversation-storage`: Persistência de histórico de chat (arquivos JSON locais).
-*   `src/boot/`: Lógica do lado do servidor (Main Process).
-*   `src/renderer/`: Código da aplicação React.
+*   `src/boot/`: Código do Processo Main (Electron/Node).
+    *   `controllers/`: Lógica de orquestração IPC.
+    *   `mcp/`: Implementação do Model Context Protocol.
+    *   `lib/`: Utilitários (Router, etc).
+*   `src/renderer/`: Código do Processo Renderer (React).
+    *   `providers/`: Abstrações para diferentes modelos (Gemini/Copilot).
+    *   `components/`: Componentes da UI.
+*   `release/`: Artefatos de build (.AppImage, .exe).
+*   `logos/`: Assets de marca.
 
-## Visualização
+## Build e Distribuição
 
-Para visualizar os diagramas acima graficamente, você pode copiar o código dos blocos `mermaid` e colar no [Mermaid Live Editor](https://mermaid.live).
+O projeto utiliza `electron-builder` para gerar executáveis portáteis.
+
+*   **Linux**: Gera `.AppImage` (Requer `libfuse2` em distros novas).
+*   **Windows**: Gera `.exe` (Pode ser cross-compiled no Linux via Wine).
+
+Para construir:
+```bash
+npm run dist
+```
