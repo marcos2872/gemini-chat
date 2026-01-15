@@ -1,0 +1,152 @@
+import { OAuth2Client } from "google-auth-library";
+import http from "http";
+import url from "url";
+import open from "open";
+import fs from "fs";
+import path from "path";
+import { app } from "electron";
+
+// Credenciais do cliente OAuth (Idealmente viriam de variáveis de ambiente seguras ou build time)
+// Estes são os mesmos do guia para Desktop
+const CLIENT_ID =
+  "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com";
+const CLIENT_SECRET = "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";
+const SCOPES = [
+  "https://www.googleapis.com/auth/cloud-platform",
+  "https://www.googleapis.com/auth/userinfo.email",
+  "https://www.googleapis.com/auth/userinfo.profile",
+  // "https://www.googleapis.com/auth/generative-language",
+];
+
+export class GoogleAuthService {
+  private client: OAuth2Client;
+  private tokenPath: string;
+
+  constructor() {
+    this.client = new OAuth2Client(
+      CLIENT_ID,
+      CLIENT_SECRET,
+      "http://localhost:3003/oauth2callback"
+    );
+
+    // Define onde salvar os tokens. No Electron, use app.getPath('userData')
+    // Se estiver rodando fora do electron (testes), fallback para diretório local
+    const userDataPath = app ? app.getPath("userData") : ".";
+    this.tokenPath = path.join(userDataPath, "google-tokens.json");
+  }
+
+  /**
+   * Obtém um cliente autenticado.
+   * @param autoLogin Se true, inicia fluxo de login se não houver token. Se false, lança erro.
+   */
+  async getAuthenticatedClient(autoLogin = false): Promise<OAuth2Client> {
+    // 1. Tenta carregar tokens salvos
+    if (await this.loadSavedTokens()) {
+      return this.client;
+    }
+
+    // 2. Se não tiver tokens, inicia novo login SE solicitado
+    if (autoLogin) {
+      await this.startNewLoginFlow();
+      return this.client;
+    }
+
+    throw new Error("Usuário não autenticado. Faça login.");
+  }
+
+  async signIn() {
+    return this.getAuthenticatedClient(true);
+  }
+
+  async signOut() {
+    try {
+      if (fs.existsSync(this.tokenPath)) fs.unlinkSync(this.tokenPath);
+      this.client.setCredentials({});
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  isArgsConfigured() {
+    // Helper to check if we have token file
+    return fs.existsSync(this.tokenPath);
+  }
+
+  /**
+   * Tenta carregar e validar tokens salvos no disco
+   */
+  private async loadSavedTokens(): Promise<boolean> {
+    if (!fs.existsSync(this.tokenPath)) return false;
+
+    try {
+      const tokens = JSON.parse(fs.readFileSync(this.tokenPath, "utf-8"));
+      this.client.setCredentials(tokens);
+
+      // Verifica se o refresh token funciona tentando obter headers (ou validando expiração)
+      // O google-auth-library faz refresh automático se tiver refresh_token
+      return true;
+    } catch (error) {
+      console.error("[Auth] Failed to load saved tokens:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Inicia o fluxo de login com servidor local
+   */
+  private async startNewLoginFlow(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const server = http.createServer(async (req, res) => {
+        try {
+          if (req.url?.startsWith("/oauth2callback")) {
+            const qs = new url.URL(req.url, "http://localhost:3003")
+              .searchParams;
+            const code = qs.get("code");
+
+            if (code) {
+              res.end("Authentication successful! You can close this window.");
+              server.close();
+
+              // Troca código por tokens
+              const { tokens } = await this.client.getToken(code);
+              this.client.setCredentials(tokens);
+              this.saveTokens(tokens);
+              console.log("[Auth] Login successful.");
+              resolve();
+            } else {
+              res.end("Authentication failed: No code found.");
+              server.close();
+              reject(new Error("No code found in callback"));
+            }
+          }
+        } catch (e) {
+          res.end("Authentication failed.");
+          server.close();
+          reject(e);
+        }
+      });
+
+      server.listen(3003, async () => {
+        const authorizeUrl = this.client.generateAuthUrl({
+          access_type: "offline",
+          scope: SCOPES,
+        });
+
+        console.log("[Auth] Opening browser for login...");
+        await open(authorizeUrl);
+      });
+    });
+  }
+
+  private saveTokens(tokens: any) {
+    try {
+      fs.writeFileSync(this.tokenPath, JSON.stringify(tokens));
+    } catch (error) {
+      console.error("[Auth] Failed to save tokens:", error);
+    }
+  }
+
+  async getAccessToken() {
+    return this.client.getAccessToken();
+  }
+}

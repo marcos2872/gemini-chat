@@ -1,12 +1,6 @@
-import * as dotenv from "dotenv";
-import {
-  GoogleGenerativeAI,
-  ChatSession,
-  GenerativeModel,
-} from "@google/generative-ai";
-import * as https from "https";
-
-dotenv.config();
+import { GoogleAuthService } from "./auth/GoogleAuthService";
+import { v4 as uuidv4 } from "uuid";
+import { OAuth2Client } from "google-auth-library";
 
 /**
  * @typedef {Object} Message
@@ -15,316 +9,287 @@ dotenv.config();
  * @property {string} timestamp - ISO string of the time
  */
 
+// Internal API Constants
+const ENDPOINT = "https://cloudcode-pa.googleapis.com/v1internal";
+
+interface LoadResponse {
+  currentTier?: { id: string };
+  cloudaicompanionProject?: string;
+}
+
+interface OnboardResponse {
+  done: boolean;
+  name?: string; // Operation name
+  response?: { cloudaicompanionProject?: { id: string } };
+}
+
 export class GeminiClient {
   private configPath: string | undefined;
-  private apiKey: string | undefined;
   public modelName: string;
-  private genAI: GoogleGenerativeAI | null;
-  private model: GenerativeModel | null;
-  private chat: ChatSession | null;
   private history: any[];
+  private authService: GoogleAuthService;
+  private client: OAuth2Client | null = null;
+  private projectId: string | undefined;
 
-  /**
-   * @param {string} [configPath] - Path to config file (optional)
-   */
   constructor(configPath?: string) {
     this.configPath = configPath;
-    this.apiKey = process.env.GEMINI_API_KEY;
-    this.modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-    this.genAI = null;
-    this.model = null;
-    this.chat = null;
-    this.history = []; // Keep local history for getHistory() compatibility
+    this.modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash-exp";
+    this.history = [];
+    this.authService = new GoogleAuthService();
   }
 
   /**
-   * Initialize the Gemini SDK.
-   * @returns {Promise<void>}
+   * Initialize and authenticate.
    */
-  async initialize(apiKey: string | null = null) {
-    if (apiKey) {
-      this.apiKey = apiKey;
-    } else if (!this.apiKey) {
-      this.apiKey = process.env.GEMINI_API_KEY;
-    }
-
-    if (!this.apiKey) {
-      console.warn("[Gemini] No API Key provided or found in environment.");
-      return;
-    }
-
+  async initialize() {
     try {
-      this.genAI = new GoogleGenerativeAI(this.apiKey);
-      this.model = this.genAI.getGenerativeModel({ model: this.modelName });
+      this.client = await this.authService.getAuthenticatedClient(false);
+      const accessToken = await this.client.getAccessToken();
 
-      // Initialize chat session
-      this.chat = this.model.startChat({
-        history: [], // We manage history externally or sync it
-      });
+      if (!accessToken.token) {
+        throw new Error("Failed to retrieve access token");
+      }
 
-      console.log(`[Gemini] SDK Initialized with model: ${this.modelName}`);
+      console.log(
+        `[Gemini] Client Initialized (Internal API mode). Model: ${this.modelName}`
+      );
     } catch (error) {
-      console.error("[Gemini] Failed to initialize SDK:", error);
-      // Don't throw here to allow app to start even if invalid key
+      // Silent fail expected if not logged in
     }
   }
 
-  async setApiKey(key: string) {
-    this.apiKey = key;
-    await this.initialize(key);
+  async signIn() {
+    this.client = await this.authService.signIn();
+    // After sign-in, we might want to pre-fetch the project ID, but we can do it lazily
+  }
+
+  async setModel(model: string) {
+    this.modelName = model;
+    console.log(`[Gemini] Model set to ${model}`);
   }
 
   isConfigured() {
-    return !!this.apiKey;
+    return !!this.client;
   }
 
   async validateConnection() {
-    if (!this.apiKey) return false;
     try {
-      const models = await this.listModels();
-      return models.length > 0;
+      const client = await this.authService.getAuthenticatedClient();
+      return !!client;
     } catch (e) {
       return false;
     }
   }
 
   /**
-   * Send a prompt to the model.
-   * @param {string} prompt
-   * @returns {Promise<string>}
+   * Performs the Handshake/Setup required by the Internal API.
+   * Loads Code Assist state and Onboards if necessary.
    */
-  /**
-   * Send a prompt to the model, optionally using MCP tools.
-   * @param {string} prompt
-   * @param {Object} [mcpManager] - The MCP Manager instance
-   * @param {Function} [onApproval] - Async callback (toolName, args) => Promise<boolean>
-   * @returns {Promise<string>}
-   */
-  async sendPrompt(prompt: string, mcpManager: any, onApproval: any) {
-    if (!this.genAI || !this.chat) {
-      this.apiKey = process.env.GEMINI_API_KEY;
-      if (this.apiKey) {
-        await this.initialize();
-      } else {
-        throw new Error("Gemini SDK not initialized. Missing API Key.");
-      }
+  private async performHandshake(): Promise<string> {
+    if (!this.client) throw new Error("Not authenticated");
+
+    // If we already have a projectId, maybe verify it?
+    // For now, we cache it. If user switches accounts, we might need reset.
+    if (this.projectId) return this.projectId;
+
+    console.log("[Gemini Setup] Loading Code Assist state...");
+
+    // A. LOAD CODE ASSIST
+    // We don't have a userProjectId from config yet, passing undefined for now (Free Tier logic)
+    const userProjectId = undefined;
+
+    const loadReq = {
+      cloudaicompanionProject: userProjectId,
+      metadata: { ideType: "IDE_UNSPECIFIED", pluginType: "GEMINI" },
+    };
+
+    const loadRes = await this.postRequest<LoadResponse>(
+      "loadCodeAssist",
+      loadReq
+    );
+
+    if (loadRes.cloudaicompanionProject) {
+      this.projectId = loadRes.cloudaicompanionProject;
+      return this.projectId;
     }
 
-    // Check if chat is still null after possible init
-    if (!this.chat || !this.model || !this.genAI)
-      throw new Error("Gemini Client failed to initialize");
+    // B. ONBOARD USER
+    const tierId = loadRes.currentTier?.id || "FREE";
+    console.log(`[Gemini Setup] User Tier: ${tierId}. Onboarding required...`);
+
+    const onboardReq = {
+      tierId: tierId,
+      cloudaicompanionProject: tierId === "FREE" ? undefined : userProjectId,
+      metadata: { ideType: "IDE_UNSPECIFIED", pluginType: "GEMINI" },
+    };
+
+    let lro = await this.postRequest<OnboardResponse>(
+      "onboardUser",
+      onboardReq
+    );
+
+    // Polling LRO
+    while (!lro.done && lro.name) {
+      console.log("[Gemini Setup] Waiting for onboarding operation...");
+      await new Promise((r) => setTimeout(r, 2000));
+      const opRes = await this.client.request({
+        url: `${ENDPOINT}/${lro.name}`,
+        method: "GET",
+      });
+      lro = opRes.data as OnboardResponse;
+    }
+
+    const finalProjectId = lro.response?.cloudaicompanionProject?.id;
+
+    if (!finalProjectId && tierId !== "FREE" && userProjectId) {
+      this.projectId = userProjectId;
+      return userProjectId!;
+    }
+
+    if (!finalProjectId)
+      throw new Error("Failed to obtain Project ID from Onboarding.");
+
+    this.projectId = finalProjectId;
+    return finalProjectId;
+  }
+
+  private async postRequest<T>(method: string, body: any): Promise<T> {
+    if (!this.client) throw new Error("Client not ready");
+    const res = await this.client.request({
+      url: `${ENDPOINT}:${method}`,
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return res.data as T;
+  }
+
+  /**
+   * Send a prompt to the internal model API.
+   */
+  async sendPrompt(prompt: string, mcpManager?: any, onApproval?: any) {
+    if (!this.client) {
+      await this.initialize();
+    }
+    if (!this.client) throw new Error("Gemini Client not authenticated");
 
     this._addToHistory("user", prompt);
 
     try {
-      let tools: any[] = [];
-      let geminiTools: any[] = [];
+      // Ensure handshake is done to get Project ID
+      const projectId = await this.performHandshake();
+      console.log(`[Gemini] Using Project ID: ${projectId}`);
 
-      if (mcpManager) {
-        tools = await mcpManager.getAllTools();
-        if (tools && tools.length > 0) {
-          geminiTools = this._mapToolsToGemini(tools);
-          // Re-initialize chat with tools if we have them
-          // Note: This is a bit expensive but necessary to inject tools dynamically
-          // We preserve history
-          const currentHistory = await this.chat.getHistory();
-          this.model = this.genAI.getGenerativeModel({
-            model: this.modelName,
-            tools: geminiTools,
-          });
-          this.chat = this.model.startChat({
-            history: currentHistory,
-          });
-        }
-      }
+      const promptId = uuidv4();
 
-      console.log(`[Gemini] Sending prompt with ${tools.length} tools...`);
+      // Prepare full history + current prompt
+      const historyContent = this.history.map((msg) => ({
+        role: msg.role === "assistant" ? "model" : "user",
+        parts: [{ text: msg.content }],
+      }));
 
-      let result = await this._callWithRetry(() =>
-        this.chat!.sendMessage(prompt)
+      const requestParams = {
+        model: this.modelName,
+        contents: historyContent,
+        config: {
+          // Future: tools mapping
+        },
+      };
+
+      const payload = this.buildInternalRequestPayload(
+        requestParams,
+        promptId,
+        projectId
       );
-      let response = result.response;
-      let text = response.text();
 
-      // Function Call Loop
-      // The SDK handles function calls by returning a part with functionCall
-      // We need to loop until the model returns just text
-      const maxTurns = 10;
-      let turn = 0;
+      console.log("[Gemini] Sending internal request...");
+      const stream = await this.sendInternalChat(this.client, payload);
 
-      while (turn < maxTurns) {
-        const functionCalls = response.functionCalls();
-        if (functionCalls && functionCalls.length > 0) {
-          console.log(
-            "[Gemini] Model requested function calls:",
-            JSON.stringify(functionCalls)
-          );
+      // Read the stream
+      let fullText = "";
 
-          const toolParts: any[] = [];
-          for (const call of functionCalls) {
-            try {
-              // Check for approval before executing the tool
-              if (typeof onApproval === "function") {
-                const approved = await onApproval(call.name, call.args);
-                if (!approved) {
-                  console.log(
-                    `[Gemini] Tool execution for ${call.name} rejected by onApproval.`
-                  );
-                  throw new Error("User denied tool execution.");
-                }
-              }
-
-              let executionResult;
-
-              executionResult = await mcpManager.callTool(call.name, call.args);
-
-              console.log(
-                `[Gemini] Tool result for ${call.name}:`,
-                executionResult
-              );
-
-              // Construct FunctionResponse
-              toolParts.push({
-                functionResponse: {
-                  name: call.name,
-                  response: { result: executionResult },
-                },
-              });
-            } catch (err: any) {
-              console.error(
-                `[Gemini] Tool execution failed for ${call.name}:`,
-                err
-              );
-              toolParts.push({
-                functionResponse: {
-                  name: call.name,
-                  response: { error: err.message },
-                },
-              });
-            }
-          }
-
-          // Send tool results back to model
-          console.log("[Gemini] Sending tool outputs to model...");
-          // Ensure chat is valid
-          if (!this.chat) throw new Error("Chat session lost");
-
-          result = await this._callWithRetry(() =>
-            this.chat!.sendMessage(toolParts)
-          );
-          response = result.response;
-          text = response.text();
-          turn++;
-        } else {
-          // No more function calls, we are done
-          break;
+      if (stream.on) {
+        stream.on("data", (d: any) => {
+          const text = this.parseChunk(d);
+          if (text) fullText += text;
+        });
+        await new Promise((resolve, reject) => {
+          stream.on("end", resolve);
+          stream.on("error", reject);
+        });
+      } else if (stream[Symbol.asyncIterator]) {
+        for await (const chunk of stream) {
+          const text = this.parseChunk(chunk);
+          if (text) fullText += text;
         }
       }
 
-      this._addToHistory("assistant", text);
-      return text;
+      this._addToHistory("assistant", fullText);
+      return fullText;
     } catch (error) {
-      console.error("[Gemini] Error sending message:", error);
+      console.error("[Gemini] Internal API Error:", error);
       throw error;
     }
   }
 
-  /**
-   * Retry helper for API calls (handling 429s)
-   */
-  async _callWithRetry(fn: () => Promise<any>, retries = 3, delay = 2000) {
-    let attempt = 0;
-    while (attempt < retries) {
-      try {
-        return await fn();
-      } catch (error: any) {
-        const isQuotaError =
-          error.message &&
-          (error.message.includes("429") ||
-            error.message.includes("Quota exceeded"));
-        if (isQuotaError && attempt < retries - 1) {
-          // Extract retry delay if possible, or backoff
-          console.warn(
-            `[Gemini] Rate limit hit (429). Retrying in ${delay}ms... (Attempt ${
-              attempt + 1
-            }/${retries})`
-          );
-          await new Promise((r) => setTimeout(r, delay));
-          delay *= 2; // Exponential backoff
-          attempt++;
-        } else {
-          throw error;
-        }
+  private parseChunk(chunk: any): string {
+    let str = chunk.toString();
+    let accumulated = "";
+
+    const lines = str.split("\n");
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        const jsonStr = line.slice(6).trim();
+        if (jsonStr === "[DONE]") continue;
+        try {
+          const data = JSON.parse(jsonStr);
+          const text =
+            data.response?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) accumulated += text;
+        } catch (e) {}
       }
     }
+    return accumulated;
   }
 
-  /**
-   * Map MCP tools to Gemini format
-   */
-  _mapToolsToGemini(mcpTools: any[]) {
-    const tools = mcpTools.map((tool) => ({
-      name: this._sanitizeName(tool.name),
-      description: tool.description || `Tool ${tool.name}`,
-      parameters: this._sanitizeSchema(tool.inputSchema),
-    }));
-    return [
-      {
-        functionDeclarations: tools,
-      } as any,
-    ]; // Force any because Gemini types might be strict about tool structure
+  private buildInternalRequestPayload(
+    req: any,
+    userPromptId: string,
+    projectId?: string
+  ) {
+    return {
+      model: req.model,
+      project: projectId,
+      user_prompt_id: userPromptId,
+      request: {
+        contents: req.contents,
+        generationConfig: req.config
+          ? {
+              temperature: req.config.temperature,
+              candidateCount: req.config.candidateCount,
+            }
+          : undefined,
+        safetySettings: req.config?.safetySettings,
+        tools: req.config?.tools,
+      },
+    };
   }
 
-  _sanitizeName(name: string) {
-    // Gemini names: ^[a-zA-Z0-9_-]+$
-    // Our namespaced names use __ which is valid (underscores).
-    // Just ensure no other chars.
-    return name.replace(/[^a-zA-Z0-9_-]/g, "_");
-  }
+  private async sendInternalChat(client: OAuth2Client, payload: any) {
+    const url = `${ENDPOINT}:streamGenerateContent?alt=sse`;
 
-  _sanitizeSchema(schema: any): any {
-    if (!schema || typeof schema !== "object") {
-      return schema;
-    }
+    // Use the authenticated client to request
+    const res = await client.request({
+      url: url,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      responseType: "stream",
+    });
 
-    // Deep clone to avoid mutating original if not already cloned
-    // But here we are processing a structure, let's just returns new objects or same if primitive
-
-    const clean = { ...schema };
-
-    // Ensure type is OBJECT for root if missing, but primarily we want to clean specific fields
-    if (!clean.type && clean.properties) {
-      clean.type = "OBJECT";
-    }
-
-    // Capitalize types for Gemini (older API requirement, good practice)
-    if (clean.type && typeof clean.type === "string") {
-      clean.type = clean.type.toUpperCase();
-    }
-
-    // Remove unsupported fields
-    delete clean.$schema;
-    delete clean.title;
-    delete clean.additionalProperties;
-    delete clean.exclusiveMinimum;
-    delete clean.exclusiveMaximum;
-    delete clean.default; // Sometimes problematic depending on context
-
-    // Recursively clean 'properties'
-    if (clean.properties) {
-      const newProps: any = {};
-      for (const [key, value] of Object.entries(clean.properties)) {
-        newProps[key] = this._sanitizeSchema(value);
-      }
-      clean.properties = newProps;
-    }
-
-    // Recursively clean 'items' (for arrays)
-    if (clean.items) {
-      clean.items = this._sanitizeSchema(clean.items);
-    }
-
-    return clean;
+    return res.data as any;
   }
 
   _addToHistory(role: string, content: string) {
@@ -337,86 +302,43 @@ export class GeminiClient {
     return msg;
   }
 
-  /**
-   * Get formattted history
-   * @returns {Array<Message>}
-   */
   getHistory() {
     return this.history;
   }
 
   shutdown() {
-    // No explicit shutdown needed for HTTP API
-    this.chat = null;
-    this.genAI = null;
+    this.client = null;
+    this.projectId = undefined;
     console.log("[Gemini] Client shut down.");
   }
 
-  /**
-   * Set the current model and reset the session.
-   * @param {string} modelName
-   */
-  async setModel(modelName: string) {
-    console.log(`[Gemini] Switching model to: ${modelName}`);
-    this.modelName = modelName;
-    await this.initialize();
+  async signOut() {
+    await this.authService.signOut();
+    this.shutdown();
   }
 
-  /**
-   * List available models using the REST API.
-   * @returns {Promise<Array<{name: string, displayName: string}>>}
-   */
   async listModels(): Promise<Array<{ name: string; displayName: string }>> {
-    if (!this.apiKey) return [];
+    const PREVIEW_GEMINI_MODEL = "gemini-3-pro-preview";
+    const PREVIEW_GEMINI_FLASH_MODEL = "gemini-3-flash-preview";
+    const DEFAULT_GEMINI_MODEL = "gemini-2.5-pro";
+    const DEFAULT_GEMINI_FLASH_MODEL = "gemini-2.5-flash";
+    const DEFAULT_GEMINI_FLASH_LITE_MODEL = "gemini-2.5-flash-lite";
+    const GEMINI_2_FLASH_EXP = "gemini-2.0-flash-exp";
 
-    return new Promise((resolve, reject) => {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${this.apiKey}`;
-
-      https
-        .get(url, (res) => {
-          let data = "";
-          res.on("data", (chunk) => (data += chunk));
-          res.on("end", () => {
-            try {
-              const json = JSON.parse(data);
-              if (json.models) {
-                const allowedModels = [
-                  "gemini-2.5-flash",
-                  "gemini-2.5-flash-lite",
-                  "gemini-2.5-pro",
-                  "gemini-3-flash-preview",
-                  "gemini-3-pro-preview",
-                ];
-
-                const validModels = json.models
-                  .filter(
-                    (m: any) =>
-                      m.supportedGenerationMethods &&
-                      m.supportedGenerationMethods.includes("generateContent")
-                  )
-                  .map((m: any) => ({
-                    name: m.name.replace("models/", ""),
-                    displayName: m.displayName || m.name.replace("models/", ""),
-                  }))
-                  .filter((m: any) => allowedModels.includes(m.name));
-                resolve(validModels);
-              } else {
-                console.warn(
-                  "[Gemini] Unexpected response listing models:",
-                  json
-                );
-                resolve([]);
-              }
-            } catch (e) {
-              console.error("[Gemini] Failed to parse model list:", e);
-              resolve([]);
-            }
-          });
-        })
-        .on("error", (err) => {
-          console.error("[Gemini] Failed to list models:", err);
-          resolve([]);
-        });
-    });
+    return [
+      {
+        name: GEMINI_2_FLASH_EXP,
+        displayName: GEMINI_2_FLASH_EXP + " (Recommended)",
+      },
+      {
+        name: PREVIEW_GEMINI_FLASH_MODEL,
+        displayName: PREVIEW_GEMINI_FLASH_MODEL,
+      },
+      { name: DEFAULT_GEMINI_MODEL, displayName: DEFAULT_GEMINI_MODEL },
+      {
+        name: DEFAULT_GEMINI_FLASH_MODEL,
+        displayName: DEFAULT_GEMINI_FLASH_MODEL,
+      },
+    ];
   }
 }

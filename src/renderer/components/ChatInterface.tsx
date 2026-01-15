@@ -401,7 +401,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
             await window.electronAPI.saveAuthToken(null);
             setCopilotConnected(false);
         } else if (provider === ProviderType.GEMINI) {
-            await window.electronAPI.setGeminiKey('');
+            await window.electronAPI.signOutGemini();
             // Force re-check
             const status = await window.electronAPI.checkGeminiConnection();
             // We can just force re-render/re-effect
