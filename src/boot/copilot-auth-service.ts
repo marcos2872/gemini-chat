@@ -2,6 +2,7 @@ const GITHUB_DEVICE_CODE_URL = 'https://github.com/login/device/code';
 const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';
 const CLIENT_DEFAULTS = { scope: 'read:user' };
 const USER_AGENT = 'Gemini-Chat-Desktop/1.0';
+const CLIENT_ID = 'Iv1.b507a08c87ecfe98';
 
 // Helper for delay
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -11,9 +12,8 @@ export class CopilotAuthService {
      * Request a device code for authentication
      * Docs: https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow
      * POST https://github.com/login/device/code
-     * @param {string} clientId 
      */
-    async requestDeviceCode(clientId: string) {
+    async requestDeviceCode() {
 
         try {
             const response = await fetch(GITHUB_DEVICE_CODE_URL, {
@@ -24,7 +24,7 @@ export class CopilotAuthService {
                     "User-Agent": USER_AGENT
                 },
                 body: JSON.stringify({
-                    client_id: clientId,
+                    client_id: CLIENT_ID,
                     scope: CLIENT_DEFAULTS.scope
                 })
             });
@@ -57,11 +57,10 @@ export class CopilotAuthService {
     /**
      * Poll for the access token
      * POST https://github.com/login/oauth/access_token
-     * @param {string} clientId 
      * @param {string} deviceCode 
      * @param {number} interval 
      */
-    async pollForToken(clientId: string, deviceCode: string, interval: number) {
+    async pollForToken(deviceCode: string, interval: number) {
         let pollInterval = Math.max(interval, 5);
         const timeout = 600 * 1000; // 10 min timeout
         const start = Date.now();
@@ -77,7 +76,7 @@ export class CopilotAuthService {
                         "User-Agent": USER_AGENT
                     },
                     body: JSON.stringify({
-                        client_id: clientId,
+                        client_id: CLIENT_ID,
                         device_code: deviceCode,
                         grant_type: "urn:ietf:params:oauth:grant-type:device_code",
                     })

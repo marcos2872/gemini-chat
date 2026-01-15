@@ -46,12 +46,12 @@ export class AuthController {
         });
 
         // Copilot Auth
-        this.router.registerHandler(IPC_CHANNELS.AUTH.REQUEST_DEVICE_CODE, async (event, clientId: string) => {
-            return await this.copilotAuth.requestDeviceCode(clientId);
+        this.router.registerHandler(IPC_CHANNELS.AUTH.REQUEST_DEVICE_CODE, async (event) => {
+            return await this.copilotAuth.requestDeviceCode();
         });
 
-        this.router.registerHandler(IPC_CHANNELS.AUTH.POLL_TOKEN, async (event, clientId, deviceCode, interval) => {
-            return await this.copilotAuth.pollForToken(clientId, deviceCode, interval);
+        this.router.registerHandler(IPC_CHANNELS.AUTH.POLL_TOKEN, async (event, deviceCode, interval) => {
+            return await this.copilotAuth.pollForToken(deviceCode, interval);
         });
 
         // Copilot Client
