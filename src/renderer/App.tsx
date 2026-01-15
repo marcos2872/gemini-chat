@@ -71,31 +71,7 @@ const App: React.FC = () => {
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleModelChange = async (model: string) => {
-        // If we have an active conversation with messages, check if we need to switch
-        if (currentConversationId) {
-            try {
-                // We rely on ChatInterface to track messages, but here we can check the list or load it
-                // Faster: just always create new if model changes and ID is set?
-                // Or checking if the current conversation is empty?
-                // Let's assume we want to "Go to another chat" basically meaning start fresh.
-
-                // Fetch current conversation to see if it's empty
-                const current = await window.electronAPI.conversationLoad(currentConversationId);
-                if (current && current.messages && current.messages.length > 0) {
-                    // Start new conversation
-                    const newConv = await window.electronAPI.conversationNew({ model });
-                    setCurrentConversationId(newConv.id);
-                } else {
-                    // Empty conversation, just update model in backend for it?
-                    // Or treating it as new is safer.
-                    // But if it's empty, we can re-purpose it.
-                    // Let's update the model locally and backend
-                }
-            } catch (e) {
-                console.error("Error checking conversation state", e);
-            }
-        }
-
+        // Simply change the model - allow using different models in same conversation
         setCurrentModel(model);
         await window.electronAPI.setModel(model);
     };
