@@ -1,15 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useMcp } from '../hooks';
+import type { McpServer } from '../../shared/types';
 import ServerModal from './ServerModal';
-
-interface MCPServer {
-    name: string;
-    command?: string;
-    args?: string[];
-    enabled?: boolean;
-    type?: 'stdio' | 'sse';
-    url?: string;
-    token?: string;
-}
 
 const CollapsibleSection = ({ title, count, children }: { title: string, count: number, children: React.ReactNode }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -42,68 +34,39 @@ const CollapsibleSection = ({ title, count, children }: { title: string, count: 
 };
 
 const MCPServerPanel: React.FC = () => {
-    const [servers, setServers] = useState<MCPServer[]>([]);
-    const [tools, setTools] = useState<any[]>([]);
-    const [prompts, setPrompts] = useState<any[]>([]);
+    const { servers, tools, prompts, addServer, updateServer, removeServer, getPrompt } = useMcp();
     const [showModal, setShowModal] = useState(false);
-    const [editingServer, setEditingServer] = useState<MCPServer | undefined>(undefined);
-
-    const loadServers = async () => {
-        const list = await window.electronAPI.mcpList();
-        setServers(list);
-
-        try {
-            const [t, p] = await Promise.all([
-                window.electronAPI.mcpListTools(),
-                window.electronAPI.mcpListPrompts()
-            ]);
-            setTools(t);
-            setPrompts(p);
-        } catch (e) {
-            console.error('Failed to load MCP capabilities', e);
-        }
-    };
-
-    useEffect(() => {
-        loadServers();
-        // Poll for tool updates every few seconds? Or just on mount/action.
-        const interval = setInterval(loadServers, 10000); // 10s refresh
-        return () => clearInterval(interval);
-    }, []);
+    const [editingServer, setEditingServer] = useState<McpServer | undefined>(undefined);
 
     const handleAddClick = () => {
         setEditingServer(undefined);
         setShowModal(true);
     };
 
-    const handleEditClick = (server: MCPServer) => {
+    const handleEditClick = (server: McpServer) => {
         setEditingServer(server);
         setShowModal(true);
     };
 
     const handleDelete = async (name: string) => {
         if (confirm(`Remove server ${name}?`)) {
-            await window.electronAPI.mcpRemove(name);
-            loadServers();
+            await removeServer(name);
         }
     };
 
-    const handleSave = async (server: MCPServer) => {
+    const handleSave = async (server: McpServer) => {
         if (editingServer) {
-            // Rename handling logic required if name changes, but keep simple for now
-            await window.electronAPI.mcpUpdate(editingServer.name, server);
+            await updateServer(editingServer.name, server);
         } else {
-            await window.electronAPI.mcpAdd(server);
+            await addServer(server);
         }
         setShowModal(false);
-        loadServers();
     };
 
-    const handleToggleEnabled = async (server: MCPServer) => {
+    const handleToggleEnabled = async (server: McpServer) => {
         try {
             const newEnabled = !(server.enabled !== false);
-            await window.electronAPI.mcpUpdate(server.name, { enabled: newEnabled });
-            await loadServers(); // Reload to reflect connection status and tools
+            await updateServer(server.name, { enabled: newEnabled });
         } catch (e) {
             alert(`Failed to toggle server: ${e}`);
         }
@@ -113,7 +76,7 @@ const MCPServerPanel: React.FC = () => {
         try {
             // Fetch the prompt content from the server
             // For now, we assume no arguments or use default
-            const result = await window.electronAPI.mcpGetPrompt(serverName, promptName, {});
+            const result = await getPrompt(serverName, promptName, {});
 
             // Format messages into a single string to put in the chat input
             if (result && result.messages) {
@@ -125,8 +88,6 @@ const MCPServerPanel: React.FC = () => {
             }
         } catch (e) {
             console.error('Failed to get prompt:', e);
-            // Fallback: just insert the name/command style?
-            // alert(`Failed to get prompt content: ${e}`);
         }
     };
 

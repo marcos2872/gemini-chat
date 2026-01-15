@@ -1,11 +1,6 @@
 import React, { useState, useEffect } from 'react';
-
-interface Conversation {
-    id: string;
-    startTime: string;
-    endTime: string;
-    messages: any[];
-}
+import { useConversation } from '../hooks';
+import type { ConversationSummary } from '../../shared/types';
 
 interface ConversationHistoryProps {
     onSelect: (id: string) => void;
@@ -13,12 +8,13 @@ interface ConversationHistoryProps {
 }
 
 const ConversationHistory: React.FC<ConversationHistoryProps> = ({ onSelect, onDelete }) => {
-    const [conversations, setConversations] = useState<Conversation[]>([]);
+    const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+    const { listConversations, deleteConversation } = useConversation();
 
     useEffect(() => {
         const load = async () => {
             try {
-                const list = await window.electronAPI.conversationList();
+                const list = await listConversations();
                 setConversations(list);
             } catch (e) { console.error(e); }
         };
@@ -26,12 +22,12 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({ onSelect, onD
         const interval = setInterval(load, 2000);
         load();
         return () => clearInterval(interval);
-    }, []);
+    }, [listConversations]);
 
     const handleDelete = async (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
         if (confirm('Delete this conversation?')) {
-            await window.electronAPI.conversationDelete(id);
+            await deleteConversation(id);
             setConversations(prev => prev.filter(c => c.id !== id));
             if (onDelete) onDelete(id);
         }
@@ -56,10 +52,10 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({ onSelect, onD
                 >
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
                         <span style={{ fontSize: '0.7rem', color: '#9DA5B4' }}>
-                            {new Date(c.endTime).toLocaleDateString()} {new Date(c.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            {c.messages && c.messages.length > 0 && (
+                            {new Date(c.endTime || c.startTime).toLocaleDateString()} {new Date(c.endTime || c.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {c.model && (
                                 <span style={{ marginLeft: '8px', padding: '2px 6px', backgroundColor: '#444', borderRadius: '4px', fontSize: '0.65rem', color: '#ccc' }}>
-                                    {(c as any).model || 'Unknown'}
+                                    {c.model}
                                 </span>
                             )}
                         </span>
@@ -72,7 +68,7 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({ onSelect, onD
                         </button>
                     </div>
                     <div style={{ color: '#ECECEC', fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {c.messages.find(m => m.role === 'user')?.content || 'New Conversation'}
+                        {c.title || `Conversation ${new Date(c.startTime).toLocaleString()}`}
                     </div>
                 </div>
             ))}

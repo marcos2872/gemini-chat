@@ -107,12 +107,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
   saveAuthToken: (token: string | null) =>
     ipcRenderer.invoke(IPC_CHANNELS.AUTH.SAVE_TOKEN, token),
   getAuthToken: () => ipcRenderer.invoke(IPC_CHANNELS.AUTH.GET_TOKEN),
-  requestDeviceCode: (clientId: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.AUTH.REQUEST_DEVICE_CODE, clientId),
-  pollForToken: (clientId: string, deviceCode: string, interval: number) =>
+  requestDeviceCode: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUTH.REQUEST_DEVICE_CODE),
+  pollForToken: (deviceCode: string, interval: number) =>
     ipcRenderer.invoke(
       IPC_CHANNELS.AUTH.POLL_TOKEN,
-      clientId,
       deviceCode,
       interval
     ),

@@ -1,23 +1,15 @@
 import React, { useState } from 'react';
-
-interface MCPServer {
-    name: string;
-    command?: string;
-    args?: string[];
-    env?: Record<string, string>;
-    url?: string;
-    type?: 'stdio' | 'sse';
-    token?: string;
-    enabled?: boolean;
-}
+import type { McpServer } from '../../shared/types';
+import { useMcp } from '../hooks';
 
 interface ServerModalProps {
-    server?: MCPServer;
+    server?: McpServer;
     onClose: () => void;
-    onSave: (server: MCPServer) => void;
+    onSave: (server: McpServer) => void;
 }
 
 const ServerModal: React.FC<ServerModalProps> = ({ server, onClose, onSave }) => {
+    const { testConfig } = useMcp();
     const [jsonContent, setJsonContent] = useState(() => {
         if (server) {
             const { name, ...rest } = server;
@@ -47,6 +39,36 @@ const ServerModal: React.FC<ServerModalProps> = ({ server, onClose, onSave }) =>
         setTestPassed(false);
     };
 
+    const parseServerFromJSON = (): McpServer => {
+        const wrappedJson = `{${jsonContent}}`;
+        const parsed = JSON.parse(wrappedJson);
+
+        const keys = Object.keys(parsed);
+        if (keys.length !== 1) {
+            throw new Error("JSON must contain exactly one server key (e.g. \"MyServer\": { ... })");
+        }
+
+        const name = keys[0];
+        const details = parsed[name];
+
+        if (details.type === 'sse') {
+            if (!details.url) throw new Error("Field 'url' is required for SSE.");
+        } else {
+            if (!details.command) throw new Error("Field 'command' is required for Stdio.");
+        }
+
+        return {
+            name,
+            command: details.command,
+            args: details.args,
+            env: details.env,
+            url: details.url,
+            type: details.type || 'stdio',
+            token: details.token,
+            enabled: details.enabled !== false
+        };
+    };
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!testPassed) {
@@ -56,34 +78,8 @@ const ServerModal: React.FC<ServerModalProps> = ({ server, onClose, onSave }) =>
         setError(null);
 
         try {
-            // Wrap in braces to make it valid JSON object
-            const wrappedJson = `{${jsonContent}}`;
-            const parsed = JSON.parse(wrappedJson);
-
-            const keys = Object.keys(parsed);
-            if (keys.length !== 1) {
-                throw new Error("JSON must contain exactly one server key (e.g. \"MyServer\": { ... })");
-            }
-
-            const name = keys[0];
-            const details = parsed[name];
-
-            if (details.type === 'sse') {
-                if (!details.url) throw new Error("Field 'url' is required for SSE.");
-            } else {
-                if (!details.command) throw new Error("Field 'command' is required for Stdio.");
-            }
-
-            onSave({
-                name,
-                command: details.command,
-                args: details.args,
-                env: details.env,
-                url: details.url,
-                type: details.type || 'stdio',
-                token: details.token,
-                enabled: details.enabled !== false
-            });
+            const serverConfig = parseServerFromJSON();
+            onSave(serverConfig);
         } catch (err: any) {
             setError(err.message);
         }
@@ -93,25 +89,8 @@ const ServerModal: React.FC<ServerModalProps> = ({ server, onClose, onSave }) =>
         setError(null);
         setTestPassed(false);
         try {
-            const wrappedJson = `{${jsonContent}}`;
-            const parsed = JSON.parse(wrappedJson);
-            const name = Object.keys(parsed)[0];
-            const details = parsed[name];
-
-            if (details.type === 'sse') {
-                if (!details.url) throw new Error("Field 'url' is required for SSE.");
-            } else {
-                if (!details.command) throw new Error("Field 'command' is required for Stdio.");
-            }
-
-            const res = await window.electronAPI.mcpTestConfig({
-                command: details.command,
-                args: details.args,
-                env: details.env,
-                url: details.url,
-                type: details.type || 'stdio',
-                token: details.token
-            });
+            const serverConfig = parseServerFromJSON();
+            const res = await testConfig(serverConfig);
 
             if (res.success && res.connected) {
                 alert("✅ Connection successful!");
@@ -124,6 +103,7 @@ const ServerModal: React.FC<ServerModalProps> = ({ server, onClose, onSave }) =>
         }
     };
 
+    // ... render logic same as before but imports updated ...
     return (
         <div style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,

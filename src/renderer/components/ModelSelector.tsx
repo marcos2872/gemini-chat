@@ -1,18 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ProviderType } from '../providers/types';
-
-export interface ModelOption {
-    provider: ProviderType;
-    id: string;
-    displayName: string;
-}
-
-export interface ProviderGroup {
-    provider: ProviderType;
-    displayName: string;
-    connected: boolean;
-    models: ModelOption[];
-}
+import { ProviderType, ModelOption, ProviderGroup } from '../hooks';
 
 interface ModelSelectorProps {
     groups: ProviderGroup[];
@@ -50,11 +37,11 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     const getIcon = (provider: ProviderType) => {
         return provider === ProviderType.GEMINI ? '🔮' : '🤖';
     };
-    
+
     // Find current model label
     let currentLabel = 'Select Model';
     let currentIcon = '❓';
-    
+
     // Search in groups
     for (const group of groups) {
         if (group.provider === activeProvider) {
@@ -95,7 +82,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                 <div style={{
                     position: 'absolute',
                     bottom: '100%',
-                    left: 0, 
+                    left: 0,
                     marginBottom: '8px',
                     backgroundColor: '#1E1E1E',
                     border: '1px solid #454545',
@@ -108,9 +95,9 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                     padding: '4px 0'
                 }}>
                     <div style={{ padding: '8px 12px', borderBottom: '1px solid #333' }}>
-                        <input 
-                            type="text" 
-                            placeholder="Select a model..." 
+                        <input
+                            type="text"
+                            placeholder="Select a model..."
                             style={{
                                 backgroundColor: 'transparent',
                                 border: 'none',
@@ -140,7 +127,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                                 <span>{group.displayName}</span>
                                 {group.connected ? (
                                     onDisconnect && (
-                                        <button 
+                                        <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 onDisconnect(group.provider);
@@ -165,7 +152,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                                     <span style={{ fontSize: '0.7rem', color: '#666' }}>Disconnected</span>
                                 )}
                             </div>
-                            
+
                             {group.connected ? (
                                 group.models.map(model => (
                                     <div
@@ -203,29 +190,29 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                             ) : (
                                 <div style={{ padding: '8px 16px' }}>
                                     {group.provider === ProviderType.GEMINI || group.provider === ProviderType.COPILOT ? (
-                                         <button 
-                                             onClick={() => onConnect(group.provider, 'oauth')}
-                                             style={{
-                                                 width: '100%',
-                                                 padding: '8px',
-                                                 backgroundColor: '#252526',
-                                                 border: '1px solid #3E3E42',
-                                                 borderRadius: '4px',
-                                                 color: '#FFF',
-                                                 cursor: 'pointer',
-                                                 fontSize: '0.85rem',
-                                                 display: 'flex',
-                                                 alignItems: 'center',
-                                                 justifyContent: 'center',
-                                                 gap: '6px'
-                                             }}
-                                             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2D2D30'}
-                                             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#252526'}
-                                         >
-                                             Connect {group.displayName}
-                                         </button>
-                                     ) : (
-                                        <button 
+                                        <button
+                                            onClick={() => onConnect(group.provider, 'oauth')}
+                                            style={{
+                                                width: '100%',
+                                                padding: '8px',
+                                                backgroundColor: '#252526',
+                                                border: '1px solid #3E3E42',
+                                                borderRadius: '4px',
+                                                color: '#FFF',
+                                                cursor: 'pointer',
+                                                fontSize: '0.85rem',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '6px'
+                                            }}
+                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2D2D30'}
+                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#252526'}
+                                        >
+                                            Connect {group.displayName}
+                                        </button>
+                                    ) : (
+                                        <button
                                             onClick={() => onConnect(group.provider)}
                                             style={{
                                                 width: '100%',
@@ -246,12 +233,12 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                                         >
                                             Connect {group.displayName}
                                         </button>
-                                     )}
+                                    )}
                                 </div>
                             )}
                         </div>
                     ))}
-                    
+
                 </div>
             )}
         </div>

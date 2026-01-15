@@ -44,7 +44,7 @@ export interface IElectronAPI {
   // Auth
   saveAuthToken: (token: string | null) => Promise<boolean>;
   getAuthToken: () => Promise<string | null>;
-  requestDeviceCode: (clientId: string) => Promise<{
+  requestDeviceCode: () => Promise<{
     device_code: string;
     user_code: string;
     verification_uri: string;
@@ -52,7 +52,6 @@ export interface IElectronAPI {
     interval: number;
   }>;
   pollForToken: (
-    clientId: string,
     deviceCode: string,
     interval: number
   ) => Promise<{ access_token: string; token_type: string } | null>;
