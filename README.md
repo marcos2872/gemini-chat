@@ -1,19 +1,26 @@
 # IA-Chat
 
-## Sobre o Projeto
-**IA-Chat** é uma aplicação desktop desenvolvida com Electron e React que traz o poder dos modelos Gemini do Google e Github Copilot para o seu computador. O projeto foca em oferecer uma interface de chat moderna e, principalmente, integração robusta com o **Protocolo de Contexto de Modelo (MCP)**, permitindo que o modelo execute ferramentas no seu sistema (como listar arquivos, ler documentos, etc.) de forma segura.
+**IA-Chat** é uma aplicação desktop moderna e poderosa desenvolvida com Electron e React. Ela unifica o acesso aos modelos **Google Gemini** e **GitHub Copilot** em uma única interface, permitindo alternar fluidamente entre eles.
 
-### Principais Funcionalidades
-*   **Chat com Gemini**: Converse com diferentes modelos (Flash, Pro, etc.).
-*   **Integração MCP**: Conecte servidores MCP para dar "superpoderes" ao modelo.
-*   **Segurança**: Sistema de aprovação de ferramentas. Você decide se o modelo pode executar uma ação ou não.
-*   **Histórico Persistente**: Suas conversas e logs de execução de ferramentas são salvos localmente.
+O grande diferencial do projeto é a **integração nativa com MCP (Model Context Protocol)**. Isso permite que você conecte "servidores de ferramentas" (como acesso a arquivos, bancos de dados, terminais cmd) e dê superpoderes aos modelos de IA, tudo rodando localmente no seu computador com controle total de privacidade e segurança.
 
-## Como Rodar
+## Principais Funcionalidades
+
+*   🤖 **Múltiplos Modelos**: Suporte nativo ao Google Gemini (Flash, Pro) e GitHub Copilot (GPT-4o, Claude 3.5 Sonnet, etc).
+*   🛠️ **MCP (Model Context Protocol)**: Conecte ferramentas externas padronizadas. O app já vem com ferramentas de sistema (leitura de arquivos, terminal) prontas para uso.
+*   🔒 **Segurança e Privacidade**:
+    *   Todo o histórico é salvo localmente no seu disco.
+    *   **Controle de Aprovação**: Antes da IA executar qualquer comando ou ler um arquivo, o app pede sua permissão explícita.
+*   🎨 **Interface Premium**: Design moderno, responsivo e com suporte a markdown, syntax highlighting e visualização de diffs.
+
+---
+
+## Como Rodar (Desenvolvimento)
 
 ### Pré-requisitos
-*   Node.js instalado (v16 ou superior).
-*   Uma chave de API do Gemini (Google AI Studio).
+*   **Node.js** (v18 ou superior recomendado).
+*   Uma chave de API do **Gemini** (Google AI Studio).
+*   *(Opcional)* Conta GitHub com acesso ao Copilot (autenticação feita via navegador).
 
 ### Instalação
 
@@ -22,25 +29,56 @@
     npm install
     ```
 
-2.  Crie um arquivo `.env` na raiz do projeto com sua chave de API:
+2.  Crie um arquivo `.env` na raiz do projeto com sua chave Gemini:
     ```env
     GEMINI_API_KEY=sua_chave_aqui
     ```
-    *(Você pode usar o arquivo `.env.example` como base)*
 
-### Desenvolvimento
-Para rodar a aplicação em modo de desenvolvimento (com Hot Reload):
-
-```bash
-npm run dev
-```
-
-### Build
-Para gerar a versão de produção (compilar o React e preparar o Electron):
-
-```bash
-npm run build
-```
+3.  Inicie em modo de desenvolvimento:
+    ```bash
+    npm run dev
+    ```
+    *Isso abrirá a janela do app com Hot Reload ativo.*
 
 ---
-Desenvolvido com Electron, React, Vite e Google Generative AI SDK.
+
+## Como Gerar o Executável (AppImage / .exe)
+
+O projeto está configurado para gerar um arquivo **AppImage** (Linux) portátil, que roda na maioria das distribuições sem instalação.
+
+### Gerando o Build
+
+Rode o comando:
+
+```bash
+npm run dist
+```
+
+Isso criará uma pasta `release/` na raiz do projeto contendo:
+*   **Linux**: Um arquivo `.AppImage` (ex: `IA-Chat-1.0.0.AppImage`).
+*   **Windows**: Um instalador `.exe` (se rodado no Windows ou com Wine configurado).
+
+### Rodando o AppImage (Linux)
+
+Após gerar o arquivo:
+1.  Vá até a pasta release: `cd release`
+2.  Dê permissão de execução: `chmod +x IA-Chat-*.AppImage`
+3.  Execute: `./IA-Chat-*.AppImage`
+
+> **Nota para usuários Ubuntu 22.04+**:
+> O AppImage precisa da biblioteca FUSE. Se não rodar, instale:
+> `sudo apt install libfuse2`
+
+### Gerando Instalador Windows (.exe)
+
+Para gerar o instalador do Windows estando no Linux, você precisa ter o **Wine** instalado (`sudo dnf install wine`).
+
+Execute:
+```bash
+npm run dist -- --win
+```
+
+O arquivo de instalação (ex: `IA-Chat Setup 1.0.0.exe`) será gerado na pasta `release/`. Você pode copiar esse arquivo para um computador Windows e instalá-lo normalmente.
+
+---
+*Desenvolvido com Electron, React, Vite, Google Generative AI e GitHub Copilot.*

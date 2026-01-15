@@ -42,8 +42,6 @@ function createWindow() {
         : path.join(__dirname, '../../../logos/logo.png');
 
     const appIcon = nativeImage.createFromPath(iconPath);
-    console.log('[Main] Icon Path:', iconPath);
-    console.log('[Main] Icon loaded?', !appIcon.isEmpty());
 
     mainWindow = new BrowserWindow({
         width: 1200,
@@ -82,6 +80,11 @@ app.whenReady().then(async () => {
         log('Gemini', 'Client initialized');
     } catch (err: any) {
         log('Gemini', `Initialization failed: ${err.message}`);
+    }
+
+    // Set App User Model ID for Windows/Linux icon association
+    if (process.platform === 'linux' || process.platform === 'win32') {
+        app.setAppUserModelId('com.iachat.app');
     }
 
     createWindow();

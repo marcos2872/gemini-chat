@@ -8,7 +8,29 @@
     "dev": "concurrently -k \"cross-env IS_DEV=true vite\" \"npm run build:main -- -w\" \"wait-on http://localhost:3000 dist/main/boot/main.js && cross-env IS_DEV=true electron .\"",
     "build:main": "tsc -p tsconfig.main.json",
     "build": "npm run build:main && vite build",
+    "dist": "npm run build && electron-builder",
     "watch": "vite build --watch"
+  },
+  "build": {
+    "appId": "com.iachat.app",
+    "productName": "IA-Chat",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "logos/**/*",
+      "package.json"
+    ],
+    "linux": {
+      "target": "AppImage",
+      "icon": "logos/logo.png",
+      "category": "Utility"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "logos/logo.ico"
+    }
   },
   "keywords": [],
   "author": "",
@@ -22,6 +44,7 @@
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
     "electron": "^39.2.7",
+    "electron-builder": "^26.4.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.0",
     "wait-on": "^9.0.3"
