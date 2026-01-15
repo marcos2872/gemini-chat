@@ -1,79 +1,86 @@
+import type {
+  Conversation,
+  ConversationSummary,
+  McpServer,
+  McpTool,
+  McpPrompt,
+  Message,
+  ToolApprovalRequest,
+  ApiResponse,
+  ConnectionStatus,
+} from "../shared/types";
+
 export interface IElectronAPI {
   ping: () => Promise<string>;
 
   // Gemini
-  sendPrompt: (prompt: string) => Promise<any>;
-  getHistory: () => Promise<any[]>;
-  setModel: (modelName: string) => Promise<void>;
-  listModels: () => Promise<string[]>;
+  sendPrompt: (prompt: string) => Promise<ApiResponse<string>>;
+  getHistory: () => Promise<Message[]>;
+  setModel: (modelName: string) => Promise<ApiResponse>;
+  listModels: () => Promise<Array<{ name: string; displayName: string }>>;
   setGeminiKey: (key: string) => Promise<{ success: boolean; valid: boolean }>;
-  checkGeminiConnection: () => Promise<{
-    success: boolean;
-    connected: boolean;
-  }>;
-  signOutGemini: () => Promise<{ success: boolean; error?: string }>;
+  checkGeminiConnection: () => Promise<ConnectionStatus>;
+  signOutGemini: () => Promise<ApiResponse>;
 
   // MCP
-  mcpList: () => Promise<any[]>;
-  mcpListTools: () => Promise<any[]>;
-  mcpListPrompts: () => Promise<any[]>;
+  mcpList: () => Promise<McpServer[]>;
+  mcpListTools: () => Promise<McpTool[]>;
+  mcpListPrompts: () => Promise<McpPrompt[]>;
   mcpGetPrompt: (
     serverName: string,
     promptName: string,
-    args: any
-  ) => Promise<any>;
-  mcpAdd: (server: any) => Promise<{ success: boolean; error?: string }>;
-  mcpRemove: (name: string) => Promise<{ success: boolean; error?: string }>;
-  mcpUpdate: (
-    name: string,
-    updates: any
-  ) => Promise<{ success: boolean; error?: string }>;
-  mcpTest: (
-    name: string
-  ) => Promise<{ success: boolean; connected?: boolean; error?: string }>;
-  mcpTestConfig: (
-    config: any
-  ) => Promise<{ success: boolean; connected?: boolean; error?: string }>;
+    args: Record<string, unknown>
+  ) => Promise<unknown>;
+  mcpAdd: (server: McpServer) => Promise<ApiResponse>;
+  mcpRemove: (name: string) => Promise<ApiResponse>;
+  mcpUpdate: (name: string, updates: Partial<McpServer>) => Promise<ApiResponse>;
+  mcpTest: (name: string) => Promise<ConnectionStatus>;
+  mcpTestConfig: (config: McpServer) => Promise<ConnectionStatus>;
   mcpCallTool: (
     name: string,
-    args: any
-  ) => Promise<{ success: boolean; result?: any; error?: string }>;
+    args: Record<string, unknown>
+  ) => Promise<ApiResponse<unknown>>;
 
   // Auth
   saveAuthToken: (token: string | null) => Promise<boolean>;
   getAuthToken: () => Promise<string | null>;
-  requestDeviceCode: (clientId: string) => Promise<any>;
+  requestDeviceCode: (clientId: string) => Promise<{
+    device_code: string;
+    user_code: string;
+    verification_uri: string;
+    expires_in: number;
+    interval: number;
+  }>;
   pollForToken: (
     clientId: string,
     deviceCode: string,
     interval: number
-  ) => Promise<any>;
+  ) => Promise<{ access_token: string; token_type: string } | null>;
 
   // Copilot
-  copilotInit: (
-    token: string
-  ) => Promise<{ success: boolean; connected: boolean }>;
-  copilotCheck: () => Promise<{ success: boolean; connected: boolean }>;
-  copilotModels: () => Promise<string[]>;
+  copilotInit: (token: string) => Promise<ConnectionStatus>;
+  copilotCheck: () => Promise<ConnectionStatus>;
+  copilotModels: () => Promise<Array<{ name: string; displayName: string }>>;
   copilotChatStream: (
-    messages: any[],
+    messages: Array<{ role: string; content: string }>,
     model: string
-  ) => Promise<{ success: boolean; error?: string }>;
-  onCopilotChunk: (callback: (chunk: string) => void) => void;
+  ) => Promise<ApiResponse>;
+  /** Returns cleanup function to remove listener - call on unmount */
+  onCopilotChunk: (callback: (chunk: string) => void) => () => void;
 
   // Conversation
-  conversationNew: (options?: any) => Promise<any>;
-  conversationLoad: (id: string) => Promise<any>;
-  conversationList: () => Promise<any[]>;
+  conversationNew: (options?: { model?: string }) => Promise<Conversation>;
+  conversationLoad: (id: string) => Promise<Conversation>;
+  conversationList: () => Promise<ConversationSummary[]>;
   conversationDelete: (id: string) => Promise<void>;
   conversationExport: (id: string, format: string) => Promise<string>;
-  conversationSync: (
-    conversation: any
-  ) => Promise<{ success: boolean; error?: string }>;
-  onConversationUpdate: (callback: (conversation: any) => void) => void;
+  conversationSync: (conversation: Conversation) => Promise<ApiResponse>;
+  /** Returns cleanup function to remove listener - call on unmount */
+  onConversationUpdate: (callback: (conversation: Conversation) => void) => () => void;
 
   // Approvals
-  onApprovalRequest: (callback: (data: any) => void) => void;
+  /** Returns cleanup function to remove listener - call on unmount */
+  onApprovalRequest: (callback: (data: ToolApprovalRequest) => void) => () => void;
   sendApprovalResponse: (approved: boolean) => void;
 
   // System
@@ -85,3 +92,4 @@ declare global {
     electronAPI: IElectronAPI;
   }
 }
+

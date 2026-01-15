@@ -1,6 +1,19 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
+// Note: Cannot import VALUES from ../shared in sandbox preload - must inline
+// Type imports are fine (erased at compile time) - use to enforce consistency
+import type { IpcChannels } from "../shared/ipc-channels";
+import type {
+  Conversation,
+  McpServer,
+  ToolApprovalRequest,
+  ToolApprovalResponse
+} from "../shared/types";
 
-const IPC_CHANNELS = {
+/**
+ * IPC_CHANNELS must match src/shared/ipc-channels.ts exactly.
+ * TypeScript will error if they differ thanks to the IpcChannels type.
+ */
+const IPC_CHANNELS: IpcChannels = {
   PING: "ping",
   GEMINI: {
     PROMPT: "gemini:prompt",
@@ -50,7 +63,7 @@ const IPC_CHANNELS = {
   SHELL: {
     OPEN: "shell:open",
   },
-} as const;
+};
 
 contextBridge.exposeInMainWorld("electronAPI", {
   ping: () => ipcRenderer.invoke(IPC_CHANNELS.PING),
@@ -72,26 +85,26 @@ contextBridge.exposeInMainWorld("electronAPI", {
   mcpList: () => ipcRenderer.invoke(IPC_CHANNELS.MCP.LIST),
   mcpListTools: () => ipcRenderer.invoke(IPC_CHANNELS.MCP.LIST_TOOLS),
   mcpListPrompts: () => ipcRenderer.invoke(IPC_CHANNELS.MCP.LIST_PROMPTS),
-  mcpGetPrompt: (serverName: string, promptName: string, args: any) =>
+  mcpGetPrompt: (serverName: string, promptName: string, args: Record<string, unknown>) =>
     ipcRenderer.invoke(
       IPC_CHANNELS.MCP.GET_PROMPT,
       serverName,
       promptName,
       args
     ),
-  mcpAdd: (server: any) => ipcRenderer.invoke(IPC_CHANNELS.MCP.ADD, server),
+  mcpAdd: (server: McpServer) => ipcRenderer.invoke(IPC_CHANNELS.MCP.ADD, server),
   mcpRemove: (name: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.MCP.REMOVE, name),
-  mcpUpdate: (name: string, updates: any) =>
+  mcpUpdate: (name: string, updates: Partial<McpServer>) =>
     ipcRenderer.invoke(IPC_CHANNELS.MCP.UPDATE, name, updates),
   mcpTest: (name: string) => ipcRenderer.invoke(IPC_CHANNELS.MCP.TEST, name),
-  mcpTestConfig: (config: any) =>
+  mcpTestConfig: (config: McpServer) =>
     ipcRenderer.invoke(IPC_CHANNELS.MCP.TEST_CONFIG, config),
-  mcpCallTool: (name: string, args: any) =>
+  mcpCallTool: (name: string, args: Record<string, unknown>) =>
     ipcRenderer.invoke(IPC_CHANNELS.MCP.CALL_TOOL, name, args),
 
   // Auth
-  saveAuthToken: (token: string) =>
+  saveAuthToken: (token: string | null) =>
     ipcRenderer.invoke(IPC_CHANNELS.AUTH.SAVE_TOKEN, token),
   getAuthToken: () => ipcRenderer.invoke(IPC_CHANNELS.AUTH.GET_TOKEN),
   requestDeviceCode: (clientId: string) =>
@@ -109,15 +122,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke(IPC_CHANNELS.COPILOT.INIT, token),
   copilotCheck: () => ipcRenderer.invoke(IPC_CHANNELS.COPILOT.CHECK_CONNECTION),
   copilotModels: () => ipcRenderer.invoke(IPC_CHANNELS.COPILOT.MODELS),
-  copilotChatStream: (messages: any[], model: string) =>
+  copilotChatStream: (messages: Array<{ role: string; content: string }>, model: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.COPILOT.CHAT_STREAM, { messages, model }),
-  onCopilotChunk: (callback: (chunk: string) => void) =>
-    ipcRenderer.on(IPC_CHANNELS.COPILOT.CHUNK, (event, chunk) =>
-      callback(chunk)
-    ),
+  onCopilotChunk: (callback: (chunk: string) => void): (() => void) => {
+    const handler = (_event: IpcRendererEvent, chunk: string) => callback(chunk);
+    ipcRenderer.on(IPC_CHANNELS.COPILOT.CHUNK, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.COPILOT.CHUNK, handler);
+  },
 
   // Conversation Management
-  conversationNew: (options: any) =>
+  conversationNew: (options?: { model?: string }) =>
     ipcRenderer.invoke(IPC_CHANNELS.CONVERSATION.NEW, options),
   conversationLoad: (id: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.CONVERSATION.LOAD, id),
@@ -126,21 +140,22 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke(IPC_CHANNELS.CONVERSATION.DELETE, id),
   conversationExport: (id: string, format: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.CONVERSATION.EXPORT, id, format),
-  conversationSync: (conversation: any) =>
+  conversationSync: (conversation: Conversation) =>
     ipcRenderer.invoke(IPC_CHANNELS.CONVERSATION.SYNC, conversation),
-  onConversationUpdate: (callback: (conversation: any) => void) =>
-    ipcRenderer.on(IPC_CHANNELS.CONVERSATION.UPDATE, (event, conversation) =>
-      callback(conversation)
-    ),
+  onConversationUpdate: (callback: (conversation: Conversation) => void): (() => void) => {
+    const handler = (_event: IpcRendererEvent, conversation: Conversation) => callback(conversation);
+    ipcRenderer.on(IPC_CHANNELS.CONVERSATION.UPDATE, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CONVERSATION.UPDATE, handler);
+  },
 
   // Tool Approval
-  onApprovalRequest: (callback: (data: any) => void) =>
-    ipcRenderer.on(
-      IPC_CHANNELS.GEMINI.APPROVAL_REQUEST,
-      (event: IpcRendererEvent, data: any) => callback(data)
-    ),
+  onApprovalRequest: (callback: (data: ToolApprovalRequest) => void): (() => void) => {
+    const handler = (_event: IpcRendererEvent, data: ToolApprovalRequest) => callback(data);
+    ipcRenderer.on(IPC_CHANNELS.GEMINI.APPROVAL_REQUEST, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.GEMINI.APPROVAL_REQUEST, handler);
+  },
   sendApprovalResponse: (approved: boolean) =>
-    ipcRenderer.send(IPC_CHANNELS.GEMINI.APPROVAL_RESPONSE, { approved }),
+    ipcRenderer.send(IPC_CHANNELS.GEMINI.APPROVAL_RESPONSE, { approved } as ToolApprovalResponse),
 
   // System
   openExternal: (url: string) =>

@@ -10,6 +10,7 @@ import { GeminiController } from './controllers/GeminiController';
 import { AuthController } from './controllers/AuthController';
 import { McpController } from './controllers/McpController';
 import { IPC_CHANNELS } from './ipc-events';
+import type { Conversation } from '../shared/types';
 
 // Logging utility
 const log = (scope: string, message: string) => {
@@ -26,13 +27,13 @@ const gemini = new GeminiClient();
 const copilotAuth = new CopilotAuthService();
 const copilotClient = new CopilotClient();
 
-let activeConversation: any = storage.createConversation();
+let activeConversation: Conversation = storage.createConversation();
 
-function getActiveConversation() {
+function getActiveConversation(): Conversation {
     return activeConversation;
 }
 
-function setActiveConversation(conv: any) {
+function setActiveConversation(conv: Conversation): void {
     activeConversation = conv;
 }
 
@@ -66,20 +67,12 @@ function createWindow() {
 app.whenReady().then(async () => {
     log('Electron', 'Application starting...');
 
-    // Load key from store if available
+    // Initialize Gemini client (OAuth-based, no API key needed)
     try {
-        const { default: Store } = await import('electron-store');
-        const store = new Store() as any;
-        const savedKey = store.get('gemini_api_key') as string;
-        if (savedKey) {
-            log('Gemini', 'Found saved API Key in storage.');
-            await gemini.initialize(savedKey);
-        } else {
-            await gemini.initialize(); // Fallback to env
-        }
-        log('Gemini', 'Client initialized');
+        await gemini.initialize();
+        log('Gemini', 'Client initialized (OAuth mode)');
     } catch (err: any) {
-        log('Gemini', `Initialization failed: ${err.message}`);
+        log('Gemini', `Initialization skipped - will prompt for sign-in: ${err.message}`);
     }
 
     // Set App User Model ID for Windows/Linux icon association

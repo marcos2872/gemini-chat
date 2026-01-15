@@ -2,19 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ProvidersFactory } from '../providers/providers.factory';
 import { ProviderType } from '../providers/types';
 import type { ChatMessage } from '../providers/types';
+import type { Conversation, Message } from '../../shared/types';
 import { ModelSelector, ModelOption, ProviderGroup } from './ModelSelector';
 import { GitHubAuthModal } from './auth/GitHubAuthModal';
 import { ApprovalModal } from './ApprovalModal';
 
-// Extend ChatMessage with MCP details if needed locally
-interface ExtendedMessage extends ChatMessage {
-    mcpCalls?: Array<{
-        server: string;
-        input: string;
-        output: string;
-        duration: number;
-        error: boolean;
-    }>;
+// Extend Message with additional fields for local UI state
+interface ExtendedMessage extends Message {
+    // Local mcpCalls can use the shared McpToolCall type via Message.mcpCalls
 }
 
 interface ChatInterfaceProps {
@@ -157,13 +152,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
 
     // Separate effect for global listeners
     useEffect(() => {
-        const cleanupApproval = window.electronAPI.onApprovalRequest((data: { toolName: string; args: any }) => {
+        const cleanup = window.electronAPI.onApprovalRequest((data) => {
             console.log('[ChatInterface] Approval requested:', data);
             setApprovalRequest(data);
         });
-        // Note: The current preload implementation doesn't return an unsubscribe easily.
-        // We should just accept it for now or refactor preload.
-        // Assuming this component mounts once or rarely re-mounts.
+        return cleanup; // Cleanup on unmount
     }, []);
 
     // Load Conversation
@@ -191,24 +184,23 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models: g
 
     // Backend Updates Listener (Primary for Gemini)
     useEffect(() => {
-        const handleUpdate = (updatedConversation: any) => {
+        const handleUpdate = (updatedConversation: Conversation) => {
             console.log('[ChatInterface] Received conversation update:', updatedConversation.id, 'Current:', conversationId);
             if (updatedConversation.id === conversationId) {
                 console.log('[ChatInterface] Updating conversation state from backend.');
                 setConversation(updatedConversation);
-                const msgs = (updatedConversation.messages || []).map((m: any) => ({
+                const msgs = (updatedConversation.messages || []).map((m) => ({
                     ...m,
                     id: m.id || crypto.randomUUID()
                 }));
                 console.log('[ChatInterface] New messages count:', msgs.length);
                 setMessages(msgs);
-                setLoading(false); // Assume done if update arrives (or check if last msg is assistant)
+                setLoading(false);
             }
         };
 
-        if (window.electronAPI.onConversationUpdate) {
-            window.electronAPI.onConversationUpdate(handleUpdate);
-        }
+        const cleanup = window.electronAPI.onConversationUpdate(handleUpdate);
+        return cleanup; // Cleanup on unmount
     }, [conversationId]);
 
 
