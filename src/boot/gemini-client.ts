@@ -175,10 +175,13 @@ export class GeminiClient {
         // 2. Loop
         while (turn < MAX_TURNS) {
             // Build Payload with current history (which includes previous turns)
+            // Filter out any empty contents from history to prevent INVALID_ARGUMENT
+            const validHistory = this.history.filter((h) => h.parts && h.parts.length > 0);
+
             const payload = this.buildInternalRequestPayload(
                 {
                     model: this.modelName,
-                    contents: this.history,
+                    contents: validHistory,
                     tools: geminiTools,
                 },
                 promptId,
@@ -297,9 +300,11 @@ export class GeminiClient {
                 const jsonStr = line.slice(6).trim();
                 if (jsonStr === '[DONE]') continue;
                 try {
-                    results.push(JSON.parse(jsonStr));
+                    const parsed = JSON.parse(jsonStr);
+                    // log.debug('[Gemini] Parsed JSON:', JSON.stringify(parsed));
+                    results.push(parsed);
                 } catch {
-                    /* ignore */
+                    log.warn('[Gemini] Failed to parse JSON chunk:', jsonStr);
                 }
             }
         }
@@ -324,13 +329,7 @@ export class GeminiClient {
 
     private async sendInternalChat(client: OAuth2Client, payload: any) {
         const url = `${ENDPOINT}:streamGenerateContent?alt=sse`;
-        // console.log("[Gemini] Sending request to: ", {
-        //   url: url,
-        //   method: "POST",
-        //   headers: { "Content-Type": "application/json" },
-        //   body: JSON.stringify(payload),
-        //   responseType: "stream",
-        // });
+
         const res = await client.request({
             url: url,
             method: 'POST',
