@@ -44,7 +44,7 @@ export class GeminiClient {
 
   constructor(configPath?: string) {
     this.configPath = configPath;
-    this.modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash-exp";
+    this.modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
     this.history = [];
     this.authService = new GoogleAuthService();
   }
@@ -331,6 +331,13 @@ export class GeminiClient {
 
   private async sendInternalChat(client: OAuth2Client, payload: any) {
     const url = `${ENDPOINT}:streamGenerateContent?alt=sse`;
+    // console.log("[Gemini] Sending request to: ", {
+    //   url: url,
+    //   method: "POST",
+    //   headers: { "Content-Type": "application/json" },
+    //   body: JSON.stringify(payload),
+    //   responseType: "stream",
+    // });
     const res = await client.request({
       url: url,
       method: "POST",
@@ -417,13 +424,7 @@ export class GeminiClient {
     const DEFAULT_GEMINI_FLASH_MODEL = "gemini-2.5-flash";
     const DEFAULT_GEMINI_FLASH_LITE_MODEL = "gemini-2.5-flash-lite";
 
-    const GEMINI_2_FLASH_EXP = "gemini-2.0-flash-exp";
-
     return [
-      {
-        name: GEMINI_2_FLASH_EXP,
-        displayName: GEMINI_2_FLASH_EXP,
-      },
       {
         name: PREVIEW_GEMINI_MODEL,
         displayName: PREVIEW_GEMINI_MODEL,

@@ -1,89 +1,117 @@
 # Guia de Implementação: Gemini CLI (Modo Interno / Secret Mode)
 
-Este documento descreve como este projeto implementa a integração com o Gemini utilizando o **Client ID oficial do Gemini CLI** e acessando a **API Interna do Google Cloud Code** (`cloudcode-pa`). Esta abordagem permite usar o login "Connect with Google" nativo sem cair nas restrições de "Restricted Client" da API pública.
+Este documento descreve a arquitetura atual do projeto, que replica o comportamento do Gemini CLI oficial para acessar a **API Interna do Google Cloud Code** (`cloudcode-pa`). Esta abordagem permite autenticação OAuth nativa ("Connect with Google") e suporte avançado a Tools.
 
-## 1. Visão Geral da Arquitetura
-
-Ao contrário da implementação padrão que usa o SDK `@google/genai` apontando para `generativelanguage.googleapis.com` (API Pública), esta implementação simula o comportamento do binário oficial `gemini` CLI.
+## 1. Visão Geral
 
 *   **Endpoint**: `https://cloudcode-pa.googleapis.com/v1internal`
 *   **Protocolo**: REST + Server-Sent Events (SSE)
-*   **SDK de Chat**: **Nenhum** (Implementação manual via `google-auth-library` para autenticação e requisições HTTP).
+*   **Autenticação**: OAuth2 com Client ID Oficial do Gemini CLI.
+*   **Recursos**: Chat, Streaming, Histórico e **Execução de Ferramentas (MCP)**.
 
 ---
 
-## 2. Autenticação OAuth Especial
+## 2. Autenticação OAuth
 
-Para "enganar" (ou se conformar com) as restrições do Client ID oficial, usamos uma configuração específica.
+Utilizamos o `google-auth-library` com uma configuração específica para contornar as restrições de "Restricted Client" da API pública.
 
-### Configuração do OAuth2Client
-*   **Client ID**: `681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com` (O mesmo do CLI oficial)
-*   **Scopes**:
-    *   `https://www.googleapis.com/auth/cloud-platform` (Crucial: Único escopo de permissão ampla aceito)
-    *   `https://www.googleapis.com/auth/userinfo.email`
-    *   `https://www.googleapis.com/auth/userinfo.profile`
-    *   **PROIBIDO**: `generative-language` (Causa erro 403 Restricted Client)
-
-### Fluxo de Login
-O fluxo de login permanece o padrão Authorization Code Flow (navegador -> callback local). A diferença é que o token gerado (com escopo `cloud-platform`) **não funciona** na API pública do Gemini, apenas na API interna do Cloud Code.
+*   **Client ID**: `681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com`
+*   **Scopes**: Apenas `cloud-platform` e `userinfo`. O escopo `generative-language` é **proibido** neste modo.
+*   **Token**: O Access Token gerado é válido apenas para a API Interna (`cloudcode-pa`), não funcina na API Pública (`generativelanguage`).
 
 ---
 
-## 3. Fluxo de Handshahe (Inicialização)
+## 3. Inicialização (Handshake)
 
-A API interna exige que o usuário seja "apresentado" e um projeto seja alocado antes de qualquer chat. Se tentarmos enviar mensagem direto, recebemos `500 Internal Error`.
+Antes do primeiro chat, é obrigatório realizar o Handshake para "apresentar" o usuário ao backend.
 
-### Passos do Handshake (replicados em `GeminiClient.performHandshake`)
-
-1.  **Load Code Assist** (`POST :loadCodeAssist`):
-    *   Verifica o estado atual do usuário.
-    *   Resposta identifica se o usuário já tem um `cloudaicompanionProject` ou qual o Tier dele.
-
-2.  **Onboard User** (`POST :onboardUser`):
-    *   Se não houver projeto, chamamos este endpoint para "aceitar os termos" e criar o vínculo.
-    *   Este endpoint retorna o `Project ID` (ex: `google-managed-project-xyz` para usuários free).
-    *   Obs: Pode ser uma operação longa (LRO - Long Running Operation), exigindo polling.
-
-O **Project ID** obtido aqui deve ser guardado e enviado em **todas** as requisições de chat.
+1.  **Load Code Assist**: Verifica se o usuário já possui conta/projeto interno.
+2.  **Onboard User**: Se necessário, cria o vínculo (aceite de termos implícito).
+3.  **Project ID**: O handshake retorna um `cloudaicompanionProject` (ex: `google-managed-project-...`). Este ID é **obrigatório** em todas as mensagens subsequentes.
 
 ---
 
-## 4. Estrutura do Chat (`:streamGenerateContent`)
+## 4. Chat e Ferramentas (MCP Integration)
 
-O envio de mensagens não usa o formato padrão do SDK. Ele exige um "envelope" que encapsula o prompt.
+A implementação do chat (`sendPrompt`) opera em um **Loop de Execução** para suportar ferramentas (Agentic Loop).
 
-### Payload
+### Fluxo do Loop
+
+1.  **Envio**: Envia o histórico + prompt atual para a API.
+2.  **Resposta**: O modelo retorna texto OU uma solicitação de execução de ferramenta (`functionCall`).
+3.  **Intercepção**:
+    *   Se for **Texto**: Exibe ao usuário e encerra o turno.
+    *   Se for **Function Call**:
+        1.  Solicita **Aprovação do Usuário** (`onApproval`).
+        2.  Executa a ferramenta via **MCP Manager**.
+        3.  Formata o resultado no envelope `functionResponse`.
+        4.  **Reenvia** o histórico atualizado (com o resultado da tool) para a API.
+        5.  O modelo processa o resultado e gera a resposta final (ou chama outra tool).
+
+### Estrutura do Payload (Request)
+
 ```json
 {
   "model": "gemini-2.0-flash-exp",
   "project": "PROJECT_ID_DO_HANDSHAKE",
-  "user_prompt_id": "UUID-V4-ALEATORIO",
+  "user_prompt_id": "UUID-V4",
   "request": {
     "contents": [
-      {
-        "role": "user",
-        "parts": [{ "text": "Olá Gemini" }]
-      }
+      { "role": "user", "parts": [{ "text": "Qual a hora em SP?" }] }
     ],
-    "generationConfig": { ... }
+    "tools": [
+      {
+        "functionDeclarations": [
+          { "name": "get_time", "description": "...", "parameters": { ... } }
+        ]
+      }
+    ]
   }
 }
 ```
 
-### Processamento da Resposta (SSE)
-A resposta vem em stream no formato Server-Sent Events (`data: {JSON}`).
-*   O retorno não é apenas texto, é uma estrutura JSON complexa.
-*   O texto da resposta se encontra em: `response.candidates[0].content.parts[0].text`.
-*   O cliente acumula esses fragmentos para formar a resposta completa.
+### Estrutura de Resposta da Tool (Function Response)
+
+Quando uma ferramenta é executada, o resultado deve ser devolvido ao modelo neste formato específico da API Interna:
+
+```json
+{
+  "role": "user", // A API Interna trata respostas de tools como input do usuário/client
+  "parts": [
+    {
+      "functionResponse": {
+        "name": "get_time",
+        "response": {
+          "name": "get_time",
+          "content": { "time": "14:00" } // Resultado JSON da tool
+        }
+      }
+    }
+  ]
+}
+```
 
 ---
 
-## 5. Diferenças Principais para o Modo Padrão
+## 5. Processamento de Resposta (SSE)
 
-| Característica | Modo Padrão (SDK Público) | Modo Interno (Gemini CLI) |
-| :--- | :--- | :--- |
-| **Endpoint** | `generativelanguage.googleapis.com` | `cloudcode-pa.googleapis.com` |
-| **Scope Necessário** | `generative-language` | `cloud-platform` |
-| **Client ID** | Qualquer um (próprio) | Apenas o Oficial do Google (Whitelist) |
-| **Inicialização** | Direta (Simples API Call) | Handshake Complexo (Load + Onboard) |
-| **Libs** | `@google/genai` | `google-auth-library` + `fetch` manual |
+O streaming da API Interna retorna eventos `data:` contendo JSON.
+*   `response.candidates[0].content.parts[0].text`: Texto parcial (stream).
+*   `response.candidates[0].content.parts[0].functionCall`: Solicitação de ferramenta.
+
+O cliente deve acumular o texto e detectar a presença de `functionCall` para decidir se continua no loop ou finaliza.
+
+---
+
+## 6. Modelos Suportados
+
+Na API Interna, os modelos geralmente possuem sufixos experimentais ou de preview.
+A lista atual implementada no código (`src/boot/gemini-client.ts`) inclui:
+
+*   `gemini-3-pro-preview`
+*   `gemini-3-flash-preview`
+*   `gemini-2.5-pro`
+*   `gemini-2.5-flash`
+*   `gemini-2.5-flash-lite`
+
+*Nota: Nomes de modelos da API pública (ex: `gemini-1.5-flash`) podem não funcionar ou exigir mapeamento.*
