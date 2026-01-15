@@ -39,7 +39,8 @@ export function useGeminiAuth(): UseGeminiAuthReturn {
         setError(null);
         try {
             // This triggers OAuth flow in main process (opens browser)
-            await window.electronAPI.sendPrompt(''); // Triggers auth if not connected
+            // This triggers OAuth flow in main process (opens browser)
+            await window.electronAPI.setGeminiKey(''); // Triggers auth via SET_KEY handler
             const status = await window.electronAPI.checkGeminiConnection();
             setIsConnected(status.connected);
         } catch (err: any) {

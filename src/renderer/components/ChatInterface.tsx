@@ -99,6 +99,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     const handleConnectProvider = async (provider: ProviderType) => {
         if (provider === ProviderType.COPILOT) {
             setIsAuthModalOpen(true);
+        } else if (provider === ProviderType.GEMINI) {
+            await geminiAuth.signIn();
+            await providers.initProviders();
         }
     };
 
