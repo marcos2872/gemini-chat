@@ -1,15 +1,15 @@
-const GITHUB_API_USER_URL = "https://api.github.com/user";
-const GITHUB_MODELS_CATALOG_URL = "https://models.github.ai/catalog/models";
-const GITHUB_INFERENCE_URL = "https://models.github.ai/inference/chat/completions";
-import { logger } from "./lib/logger";
+const GITHUB_API_USER_URL = 'https://api.github.com/user';
+// const GITHUB_MODELS_CATALOG_URL = 'https://models.github.ai/catalog/models';
+// const GITHUB_INFERENCE_URL = 'https://models.github.ai/inference/chat/completions';
+import { logger } from './lib/logger';
 
 const log = logger.copilot;
 
 const DEFAULT_HEADERS = {
-    "Accept": "application/json",
-    "User-Agent": "GeminiChat-App/1.0",
-    "Editor-Version": "vscode/1.85.0",
-    "Editor-Plugin-Version": "copilot/1.145.0",
+    Accept: 'application/json',
+    'User-Agent': 'GeminiChat-App/1.0',
+    'Editor-Version': 'vscode/1.85.0',
+    'Editor-Plugin-Version': 'copilot/1.145.0',
 };
 
 /**
@@ -48,7 +48,7 @@ export class CopilotClient {
     }
 
     private async exchangeToken() {
-        if (!this.oauthToken) throw new Error("No OAuth token provided");
+        if (!this.oauthToken) throw new Error('No OAuth token provided');
 
         // Simple check if existing token is valid
         if (this.apiToken && Date.now() < this.tokenExpiresAt) return;
@@ -61,11 +61,11 @@ export class CopilotClient {
         this.tokenExchangePromise = (async () => {
             try {
                 log.debug('Exchanging OAuth token for API Token...');
-                const response = await fetch("https://api.github.com/copilot_internal/v2/token", {
+                const response = await fetch('https://api.github.com/copilot_internal/v2/token', {
                     headers: {
                         ...DEFAULT_HEADERS,
-                        "Authorization": `token ${this.oauthToken}`
-                    }
+                        Authorization: `token ${this.oauthToken}`,
+                    },
                 });
 
                 if (!response.ok) {
@@ -76,11 +76,11 @@ export class CopilotClient {
 
                 this.apiToken = data.token;
                 // Ensure endpoint doesn't have trailing slash
-                this.apiEndpoint = data.endpoints?.api?.replace(/\/$/, '') || "https://api.githubcopilot.com";
-                this.tokenExpiresAt = (data.expires_at || (Date.now() / 1000 + 1500)) * 1000; // default 25 min
+                this.apiEndpoint =
+                    data.endpoints?.api?.replace(/\/$/, '') || 'https://api.githubcopilot.com';
+                this.tokenExpiresAt = (data.expires_at || Date.now() / 1000 + 1500) * 1000; // default 25 min
 
                 log.debug('Token exchanged', { endpoint: this.apiEndpoint });
-
             } catch (error: any) {
                 log.error('Token exchange error', { error: error.message });
                 throw error;
@@ -113,15 +113,15 @@ export class CopilotClient {
                 method: 'GET',
                 headers: {
                     ...DEFAULT_HEADERS,
-                    "Authorization": `Bearer ${this.oauthToken}`
+                    Authorization: `Bearer ${this.oauthToken}`,
                 },
-                signal: controller.signal
+                signal: controller.signal,
             });
 
             clearTimeout(timeoutId);
             return response.ok;
         } catch (error: any) {
-            console.error("[CopilotClient] Connection check failed:", error.message);
+            console.error('[CopilotClient] Connection check failed:', error.message);
             return false;
         }
     }
@@ -159,10 +159,10 @@ export class CopilotClient {
                 method: 'GET',
                 headers: {
                     ...DEFAULT_HEADERS,
-                    "Authorization": `Bearer ${this.apiToken}`,
-                    "Copilot-Integration-Id": "vscode-chat"
+                    Authorization: `Bearer ${this.apiToken}`,
+                    'Copilot-Integration-Id': 'vscode-chat',
                 },
-                signal: controller.signal
+                signal: controller.signal,
             });
 
             clearTimeout(timeoutId);
@@ -178,24 +178,23 @@ export class CopilotClient {
             // Usually { data: [...] } for /models endpoint in OpenAI style, but Copilot might differ.
             // Documentation says "JSON com a lista de modelos".
             // Let's handle both.
-            const models = Array.isArray(data) ? data : (data.data || []);
+            const models = Array.isArray(data) ? data : data.data || [];
 
             // Filter
             const validModels = models.filter((m: any) => {
                 // model_picker_enabled === true
                 if (m.model_picker_enabled !== true) return false;
                 // capabilities.type === "chat"
-                if (m.capabilities?.type !== "chat") return false;
+                if (m.capabilities?.type !== 'chat') return false;
                 // policy.state === "enabled"
-                if (m.policy?.state !== "enabled") return false;
+                if (m.policy?.state !== 'enabled') return false;
                 return true;
             });
 
             return validModels.map((m: any) => ({
                 name: m.id || m.name,
-                displayName: m.name || m.id
+                displayName: m.name || m.id,
             }));
-
         } catch (error: any) {
             log.warn('Failed to fetch models', { error: error.message });
             return [];
@@ -204,21 +203,21 @@ export class CopilotClient {
 
     /**
      * Send a prompt to the model.
-     * @param {string} prompt 
+     * @param {string} prompt
      * @param {Object} [mcpManager] - Ignored for now
      * @param {Function} [onApproval] - Ignored for now
      * @returns {Promise<string>}
      */
     async sendPrompt(prompt: string, mcpManager: any, onApproval: any) {
-        if (!this.oauthToken) throw new Error("Not authenticated");
+        if (!this.oauthToken) throw new Error('Not authenticated');
         await this.exchangeToken();
 
         this._addToHistory('user', prompt);
 
         // Prepare messages from history
-        let messages: any[] = this.history.map(m => ({
+        const messages: any[] = this.history.map((m) => ({
             role: m.role,
-            content: m.content
+            content: m.content,
         }));
 
         // Handle Tools
@@ -241,12 +240,12 @@ export class CopilotClient {
                 const payload: any = {
                     messages: messages,
                     model: this.modelName,
-                    stream: false
+                    stream: false,
                 };
 
                 if (openAITools.length > 0) {
                     payload.tools = openAITools;
-                    payload.tool_choice = "auto";
+                    payload.tool_choice = 'auto';
                 }
 
                 const controller = new AbortController();
@@ -256,12 +255,12 @@ export class CopilotClient {
                     method: 'POST',
                     headers: {
                         ...DEFAULT_HEADERS,
-                        "Authorization": `Bearer ${this.apiToken}`,
-                        "Content-Type": "application/json",
-                        "Copilot-Integration-Id": "vscode-chat"
+                        Authorization: `Bearer ${this.apiToken}`,
+                        'Content-Type': 'application/json',
+                        'Copilot-Integration-Id': 'vscode-chat',
                     },
                     body: JSON.stringify(payload),
-                    signal: controller.signal
+                    signal: controller.signal,
                 });
 
                 clearTimeout(timeoutId);
@@ -271,9 +270,14 @@ export class CopilotClient {
                     try {
                         const errData = await response.json();
                         if (errData.error) {
-                            errorMsg = typeof errData.error === 'string' ? errData.error : JSON.stringify(errData.error);
+                            errorMsg =
+                                typeof errData.error === 'string'
+                                    ? errData.error
+                                    : JSON.stringify(errData.error);
                         }
-                    } catch (e) { /* ignore */ }
+                    } catch {
+                        /* ignore */
+                    }
                     throw new Error(errorMsg);
                 }
 
@@ -286,7 +290,9 @@ export class CopilotClient {
                     messages.push(message);
 
                     if (message.tool_calls && message.tool_calls.length > 0) {
-                        log.info('Tool calls requested', { tools: message.tool_calls.map((t: any) => t.function.name) });
+                        log.info('Tool calls requested', {
+                            tools: message.tool_calls.map((t: any) => t.function.name),
+                        });
 
                         // Execute Tools
                         for (const toolCall of message.tool_calls) {
@@ -295,8 +301,11 @@ export class CopilotClient {
                             let args = {};
                             try {
                                 args = JSON.parse(argsString);
-                            } catch (e) {
-                                log.error('Failed to parse tool args', { tool: functionName, args: argsString });
+                            } catch {
+                                log.error('Failed to parse tool args', {
+                                    tool: functionName,
+                                    args: argsString,
+                                });
                             }
 
                             // Approval
@@ -304,7 +313,7 @@ export class CopilotClient {
                                 const approved = await onApproval(functionName, args);
                                 if (!approved) {
                                     log.warn('Tool execution rejected', { tool: functionName });
-                                    throw new Error("User denied tool execution.");
+                                    throw new Error('User denied tool execution.');
                                 }
                             }
 
@@ -320,9 +329,9 @@ export class CopilotClient {
 
                             // Append Tool Output
                             messages.push({
-                                role: "tool",
+                                role: 'tool',
                                 tool_call_id: toolCall.id,
-                                content: JSON.stringify(result)
+                                content: JSON.stringify(result),
                             });
                         }
                         turn++;
@@ -333,31 +342,30 @@ export class CopilotClient {
                             this._addToHistory('assistant', message.content);
                             return message.content;
                         } else {
-                            throw new Error("No content in response");
+                            throw new Error('No content in response');
                         }
                     }
                 } else {
-                    console.warn("[Copilot] Response contained no choices/messages.");
-                    throw new Error("No content in response");
+                    console.warn('[Copilot] Response contained no choices/messages.');
+                    throw new Error('No content in response');
                 }
-
             } catch (error: any) {
-                console.error("[CopilotClient] Chat request failed:", error.message);
+                console.error('[CopilotClient] Chat request failed:', error.message);
                 throw error;
             }
         }
 
-        throw new Error("Max conversation turns reached.");
+        throw new Error('Max conversation turns reached.');
     }
 
     _mapToolsToOpenAI(mcpTools: any[]) {
-        return mcpTools.map(tool => ({
-            type: "function",
+        return mcpTools.map((tool) => ({
+            type: 'function',
             function: {
                 name: tool.name,
                 description: tool.description,
-                parameters: tool.inputSchema
-            }
+                parameters: tool.inputSchema,
+            },
         }));
     }
 
@@ -365,7 +373,7 @@ export class CopilotClient {
         const msg = {
             role,
             content,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         };
         this.history.push(msg);
         return msg;

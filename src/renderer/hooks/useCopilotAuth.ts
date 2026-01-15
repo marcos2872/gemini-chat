@@ -65,7 +65,7 @@ export function useCopilotAuth(): UseCopilotAuthReturn {
             // Step 2: Poll for token (backend handles polling)
             const tokenResult = await window.electronAPI.pollForToken(
                 codeData.device_code,
-                codeData.interval
+                codeData.interval,
             );
 
             if (cancelledRef.current) {

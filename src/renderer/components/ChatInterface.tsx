@@ -8,7 +8,7 @@ import {
     useChat,
     useApproval,
     ProviderType,
-    ModelOption
+    ModelOption,
 } from '../hooks';
 import { GitHubAuthModal } from './auth/GitHubAuthModal';
 import { ApprovalModal } from './ApprovalModal';
@@ -23,9 +23,9 @@ interface ChatInterfaceProps {
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({
     conversationId,
-    models,
+    // models,
     currentModel,
-    onModelChange
+    onModelChange,
 }) => {
     // Hooks
     const providers = useProviders();
@@ -54,7 +54,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     // Initialize providers on mount
     useEffect(() => {
         const init = async () => {
-
             await providers.initProviders();
         };
         init();
@@ -64,8 +63,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     // Sync active model from props
     useEffect(() => {
         if (currentModel && providers.providerGroups.length > 0) {
-            const allModels = providers.providerGroups.flatMap(g => g.models);
-            const found = allModels.find(m => m.id === currentModel);
+            const allModels = providers.providerGroups.flatMap((g) => g.models);
+            const found = allModels.find((m) => m.id === currentModel);
             if (found) {
                 providers.selectModel(found);
             }
@@ -86,7 +85,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     // Handle model selection
     const handleModelSelection = async (option: ModelOption) => {
         if (option.provider === ProviderType.COPILOT) {
-            const group = providers.providerGroups.find(g => g.provider === ProviderType.COPILOT);
+            const group = providers.providerGroups.find((g) => g.provider === ProviderType.COPILOT);
             if (!group?.connected) {
                 setIsAuthModalOpen(true);
                 return;
@@ -127,7 +126,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             id: crypto.randomUUID(),
             role: 'user',
             content: input,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         };
 
         conversation.addMessage(userMsg);
@@ -140,7 +139,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 id: assistantMsgId,
                 role: 'assistant',
                 content: '',
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
             };
             conversation.addMessage(assistantMsg);
 
@@ -156,9 +155,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
                 try {
                     const history = [...conversation.messages];
-                    const contextMessages = history.filter(m => m.id !== assistantMsgId);
+                    const contextMessages = history.filter((m) => m.id !== assistantMsgId);
 
-                    await chat.sendMessage(input, ProviderType.COPILOT, providers.activeModelId, contextMessages);
+                    await chat.sendMessage(
+                        input,
+                        ProviderType.COPILOT,
+                        providers.activeModelId,
+                        contextMessages,
+                    );
                 } finally {
                     cleanupChunk();
                     setLoading(false);
@@ -168,8 +172,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     const finalMsg = { ...assistantMsg, content: collectedContent };
                     const updatedConv = {
                         ...conversation.conversation,
-                        messages: conversation.messages.map(m => m.id === assistantMsgId ? finalMsg : m),
-                        updated: Date.now()
+                        messages: conversation.messages.map((m) =>
+                            m.id === assistantMsgId ? finalMsg : m,
+                        ),
+                        updated: Date.now(),
                     };
                     await conversation.syncConversation(updatedConv);
                 }
@@ -180,7 +186,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 id: crypto.randomUUID(),
                 role: 'assistant',
                 content: `Error: ${err.message || 'Unknown error'}`,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
             });
         } finally {
             setLoading(false);
@@ -199,14 +205,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     };
 
     return (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            flex: 1,
-            overflow: 'hidden',
-            position: 'relative',
-            backgroundColor: '#1E1E1E'
-        }}>
+        <div
+            style={{
+                display: 'flex',
+                flexDirection: 'column',
+                flex: 1,
+                overflow: 'hidden',
+                position: 'relative',
+                backgroundColor: '#1E1E1E',
+            }}
+        >
             <ChatMessages
                 messages={conversation.messages}
                 loading={loading}

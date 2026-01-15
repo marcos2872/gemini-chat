@@ -1,6 +1,6 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { URL } from 'url';
 import { MCPServer } from './McpConfigService';
 import { logger } from '../lib/logger';
@@ -18,17 +18,23 @@ class SimpleAuthProvider {
     async tokens() {
         return {
             access_token: this.token,
-            token_type: 'Bearer'
+            token_type: 'Bearer',
         };
     }
 
-    get redirectUrl() { return undefined; }
-    async clientInformation() { return undefined; }
-    async saveClientInformation() { }
-    async saveTokens() { }
-    async redirectToAuthorization() { }
-    async saveCodeVerifier() { }
-    async codeVerifier() { return ''; }
+    get redirectUrl() {
+        return undefined;
+    }
+    async clientInformation() {
+        return undefined;
+    }
+    async saveClientInformation() {}
+    async saveTokens() {}
+    async redirectToAuthorization() {}
+    async saveCodeVerifier() {}
+    async codeVerifier() {
+        return '';
+    }
 }
 
 export class McpConnectionManager {
@@ -65,26 +71,26 @@ export class McpConnectionManager {
                 if (server.token) {
                     opts.authProvider = new SimpleAuthProvider(server.token);
                 }
-                if (!server.url) throw new Error("URL missing for SSE");
+                if (!server.url) throw new Error('URL missing for SSE');
                 transport = new SSEClientTransport(new URL(server.url), opts);
             } else {
                 transport = new StdioClientTransport({
                     command: server.command!,
                     args: server.args || [],
-                    env: { ...process.env, ...(server.env || {}) } as Record<string, string>
+                    env: { ...process.env, ...(server.env || {}) } as Record<string, string>,
                 });
             }
 
             const client = new Client(
                 {
-                    name: "gemini-desktop-client",
-                    version: "1.0.0",
+                    name: 'gemini-desktop-client',
+                    version: '1.0.0',
                 },
                 {
                     capabilities: {
                         sampling: {},
                     },
-                }
+                },
             );
 
             await client.connect(transport);
@@ -126,7 +132,7 @@ export class McpConnectionManager {
         let client = this.clients.get(server.name);
 
         if (!client) {
-            // Not connected context, try temporary connection? 
+            // Not connected context, try temporary connection?
             // Or should we implement the logic from the old manager?
             // "if not connected, try to connect"
             try {

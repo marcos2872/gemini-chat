@@ -5,7 +5,7 @@ const USER_AGENT = 'Gemini-Chat-Desktop/1.0';
 const CLIENT_ID = 'Iv1.b507a08c87ecfe98';
 
 // Helper for delay
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export class CopilotAuthService {
     /**
@@ -14,19 +14,18 @@ export class CopilotAuthService {
      * POST https://github.com/login/device/code
      */
     async requestDeviceCode() {
-
         try {
             const response = await fetch(GITHUB_DEVICE_CODE_URL, {
                 method: 'POST',
                 headers: {
-                    "Accept": "application/json",
-                    "Content-Type": "application/json",
-                    "User-Agent": USER_AGENT
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                    'User-Agent': USER_AGENT,
                 },
                 body: JSON.stringify({
                     client_id: CLIENT_ID,
-                    scope: CLIENT_DEFAULTS.scope
-                })
+                    scope: CLIENT_DEFAULTS.scope,
+                }),
             });
 
             if (!response.ok) {
@@ -35,7 +34,9 @@ export class CopilotAuthService {
                 try {
                     const errData = await response.json();
                     errorDetails = errData.error_description || errData.error || errorDetails;
-                } catch (e) { /* ignore parse error */ }
+                } catch (e: any) {
+                    console.error('[CopilotAuthService] Request Code Error:', e.message);
+                }
 
                 throw new Error(errorDetails);
             }
@@ -57,29 +58,28 @@ export class CopilotAuthService {
     /**
      * Poll for the access token
      * POST https://github.com/login/oauth/access_token
-     * @param {string} deviceCode 
-     * @param {number} interval 
+     * @param {string} deviceCode
+     * @param {number} interval
      */
     async pollForToken(deviceCode: string, interval: number) {
         let pollInterval = Math.max(interval, 5);
         const timeout = 600 * 1000; // 10 min timeout
         const start = Date.now();
 
-
         while (Date.now() - start < timeout) {
             try {
                 const response = await fetch(GITHUB_TOKEN_URL, {
                     method: 'POST',
                     headers: {
-                        "Accept": "application/json",
-                        "Content-Type": "application/json",
-                        "User-Agent": USER_AGENT
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'User-Agent': USER_AGENT,
                     },
                     body: JSON.stringify({
                         client_id: CLIENT_ID,
                         device_code: deviceCode,
-                        grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-                    })
+                        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+                    }),
                 });
 
                 // Network or Server Errors
@@ -92,8 +92,9 @@ export class CopilotAuthService {
                     const data = await response.json();
 
                     if (data.error) {
-                        if (data.error === "authorization_pending") {
-                        } else if (data.error === "slow_down") {
+                        if (data.error === 'authorization_pending') {
+                            // Wait and retry
+                        } else if (data.error === 'slow_down') {
                             pollInterval += 5;
                         } else {
                             // Fatal error (e.g., expired_token, access_denied)
@@ -110,8 +111,8 @@ export class CopilotAuthService {
                     }
                 }
             } catch (err: any) {
-                console.error("[CopilotAuthService] Polling error:", err.message);
-                // If it's a fatal logic error, we should probably stop. 
+                console.error('[CopilotAuthService] Polling error:', err.message);
+                // If it's a fatal logic error, we should probably stop.
                 // But for now we treat as retriable unless explicitly thrown above.
                 if (!err.message.includes('fetch')) {
                     // logic errors re-thrown
@@ -125,6 +126,6 @@ export class CopilotAuthService {
             await delay(pollInterval * 1000);
         }
 
-        throw new Error("Timeout polling for token");
+        throw new Error('Timeout polling for token');
     }
 }

@@ -30,7 +30,7 @@ export class ConversationStorage {
             startTime: now,
             endTime: now,
             messages: [] as any[],
-            mcpServersUsed: [] as any[]
+            mcpServersUsed: [] as any[],
         };
     }
 
@@ -72,7 +72,9 @@ export class ConversationStorage {
         }
 
         // Sort by recent
-        return conversations.sort((a, b) => new Date(b.endTime).getTime() - new Date(a.endTime).getTime());
+        return conversations.sort(
+            (a, b) => new Date(b.endTime).getTime() - new Date(a.endTime).getTime(),
+        );
     }
 
     async deleteConversation(id: string) {
@@ -98,7 +100,8 @@ export class ConversationStorage {
                 output += `${msg.content}\n\n`;
                 output += `---\n\n`;
             });
-        } else { // txt
+        } else {
+            // txt
             conv.messages.forEach((msg: any) => {
                 output += `[${msg.timestamp}] ${msg.role.toUpperCase()}:\n`;
                 output += `${msg.content}\n\n`;

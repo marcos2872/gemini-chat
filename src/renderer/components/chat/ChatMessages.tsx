@@ -27,29 +27,34 @@ export const ChatMessages = forwardRef<HTMLDivElement, ChatMessagesProps>(
                             padding: msg.role === 'user' || msg.role === 'system' ? '1rem' : '0',
                             borderRadius: '8px',
                             maxWidth: '80%',
-                            textAlign: 'left'
+                            textAlign: 'left',
                         }}
                     >
-                        <strong style={{
-                            color: msg.role === 'user' ? '#4B90F5' : '#9DA5B4'
-                        }}>
+                        <strong
+                            style={{
+                                color: msg.role === 'user' ? '#4B90F5' : '#9DA5B4',
+                            }}
+                        >
                             {msg.role === 'user'
                                 ? 'You'
-                                : (msg.role === 'system'
-                                    ? 'System'
-                                    : (activeProviderType === ProviderType.COPILOT ? 'Copilot' : 'Gemini')
-                                )
-                            }
+                                : msg.role === 'system'
+                                  ? 'System'
+                                  : activeProviderType === ProviderType.COPILOT
+                                    ? 'Copilot'
+                                    : 'Gemini'}
                         </strong>
-                        <div style={{
-                            whiteSpace: 'pre-wrap',
-                            marginTop: '0.5rem',
-                            lineHeight: '1.5'
-                        }}>
-                            {msg.role === 'system'
-                                ? <CollapsibleLog content={msg.content} />
-                                : msg.content
-                            }
+                        <div
+                            style={{
+                                whiteSpace: 'pre-wrap',
+                                marginTop: '0.5rem',
+                                lineHeight: '1.5',
+                            }}
+                        >
+                            {msg.role === 'system' ? (
+                                <CollapsibleLog content={msg.content} />
+                            ) : (
+                                msg.content
+                            )}
                         </div>
                     </div>
                 ))}
@@ -57,7 +62,7 @@ export const ChatMessages = forwardRef<HTMLDivElement, ChatMessagesProps>(
                 <div ref={ref} />
             </div>
         );
-    }
+    },
 );
 
 ChatMessages.displayName = 'ChatMessages';

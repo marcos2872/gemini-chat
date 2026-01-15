@@ -19,17 +19,19 @@ export const CollapsibleLog: React.FC<CollapsibleLogProps> = ({ content }) => {
                 onClick={() => setIsExpanded(!isExpanded)}
                 style={{
                     cursor: 'pointer',
-                    color: title.startsWith('✅') ? '#4CAF50' : '#f44336'
+                    color: title.startsWith('✅') ? '#4CAF50' : '#f44336',
                 }}
             >
                 {isExpanded ? '▼' : '▶'} {title}
             </div>
             {isExpanded && (
-                <pre style={{
-                    backgroundColor: '#1E1E1E',
-                    padding: '0.5rem',
-                    marginTop: '0.5rem'
-                }}>
+                <pre
+                    style={{
+                        backgroundColor: '#1E1E1E',
+                        padding: '0.5rem',
+                        marginTop: '0.5rem',
+                    }}
+                >
                     {details}
                 </pre>
             )}

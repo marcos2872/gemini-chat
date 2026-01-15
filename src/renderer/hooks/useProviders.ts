@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 
 // Provider type enum - shared across hooks
 export enum ProviderType {
@@ -59,7 +59,7 @@ export function useProviders(): UseProvidersReturn {
 
                 if (isGeminiConnected) {
                     const models = await window.electronAPI.listModels();
-                    geminiModels = models.map(m => ({
+                    geminiModels = models.map((m) => ({
                         provider: ProviderType.GEMINI,
                         id: m.name,
                         displayName: m.displayName || m.name,
@@ -96,7 +96,7 @@ export function useProviders(): UseProvidersReturn {
 
                 if (isCopilotConnected) {
                     const models = await window.electronAPI.copilotModels();
-                    copilotModels = models.map(m => ({
+                    copilotModels = models.map((m) => ({
                         provider: ProviderType.COPILOT,
                         id: m.name,
                         displayName: m.displayName || m.name,

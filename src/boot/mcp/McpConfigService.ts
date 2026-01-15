@@ -61,7 +61,7 @@ export class McpConfigService {
 
     async saveServers(servers: MCPServer[]) {
         const config = {
-            mcpServers: servers.map(s => ({
+            mcpServers: servers.map((s) => ({
                 [s.name]: {
                     command: s.command,
                     args: s.args,
@@ -69,9 +69,9 @@ export class McpConfigService {
                     url: s.url,
                     type: s.type,
                     token: s.token,
-                    enabled: s.enabled
-                }
-            }))
+                    enabled: s.enabled,
+                },
+            })),
         };
         await this.saveConfig(config);
     }

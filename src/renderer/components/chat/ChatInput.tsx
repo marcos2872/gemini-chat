@@ -37,11 +37,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     onConfigure,
 }) => {
     return (
-        <div style={{
-            padding: '12px',
-            borderTop: '1px solid #3E3E42',
-            backgroundColor: '#1E1E1E'
-        }}>
+        <div
+            style={{
+                padding: '12px',
+                borderTop: '1px solid #3E3E42',
+                backgroundColor: '#1E1E1E',
+            }}
+        >
             <textarea
                 value={input}
                 onChange={(e) => onInputChange(e.target.value)}
@@ -60,12 +62,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     fontSize: 'inherit',
                 }}
             />
-            <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                marginTop: '8px',
-                alignItems: 'center'
-            }}>
+            <div
+                style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    marginTop: '8px',
+                    alignItems: 'center',
+                }}
+            >
                 <div style={{ display: 'flex', gap: '8px' }}>
                     <ModelSelector
                         groups={providerGroups}
@@ -89,7 +93,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             border: 'none',
                             borderRadius: '4px',
                             cursor: loading ? 'not-allowed' : 'pointer',
-                            fontWeight: 600
+                            fontWeight: 600,
                         }}
                     >
                         {loading ? 'Sending...' : 'Send'}

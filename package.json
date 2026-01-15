@@ -9,7 +9,10 @@
     "build:main": "tsc -p tsconfig.main.json",
     "build": "npm run build:main && vite build",
     "dist": "npm run build && electron-builder",
-    "watch": "vite build --watch"
+    "watch": "vite build --watch",
+    "lint": "eslint src --ext ts,tsx --report-unused-disable-directives",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css,json,md}\"",
+    "prepare": "husky"
   },
   "build": {
     "appId": "com.iachat.app",
@@ -40,11 +43,21 @@
     "@types/node": "^25.0.8",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "@typescript-eslint/eslint-plugin": "^8.53.0",
+    "@typescript-eslint/parser": "^8.53.0",
     "@vitejs/plugin-react": "^5.1.2",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
     "electron": "^39.2.7",
     "electron-builder": "^26.4.0",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "prettier": "^3.8.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.0",
     "wait-on": "^9.0.3"

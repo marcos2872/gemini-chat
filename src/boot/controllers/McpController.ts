@@ -5,7 +5,7 @@ import { McpService } from '../mcp/McpService';
 export class McpController {
     constructor(
         private router: IpcRouter,
-        private mcpManager: McpService
+        private mcpManager: McpService,
     ) {
         this.registerRoutes();
     }
@@ -20,12 +20,19 @@ export class McpController {
             }
         });
 
-        this.router.registerHandler(IPC_CHANNELS.MCP.LIST_TOOLS, async () => this.mcpManager.getAllTools());
-        this.router.registerHandler(IPC_CHANNELS.MCP.LIST_PROMPTS, async () => this.mcpManager.getAllPrompts());
+        this.router.registerHandler(IPC_CHANNELS.MCP.LIST_TOOLS, async () =>
+            this.mcpManager.getAllTools(),
+        );
+        this.router.registerHandler(IPC_CHANNELS.MCP.LIST_PROMPTS, async () =>
+            this.mcpManager.getAllPrompts(),
+        );
 
-        this.router.registerHandler(IPC_CHANNELS.MCP.GET_PROMPT, async (event, serverName: string, promptName: string, args: any) => {
-            return await this.mcpManager.getPrompt(serverName, promptName, args);
-        });
+        this.router.registerHandler(
+            IPC_CHANNELS.MCP.GET_PROMPT,
+            async (event, serverName: string, promptName: string, args: any) => {
+                return await this.mcpManager.getPrompt(serverName, promptName, args);
+            },
+        );
 
         this.router.registerHandler(IPC_CHANNELS.MCP.ADD, async (event, server: any) => {
             try {
@@ -45,14 +52,17 @@ export class McpController {
             }
         });
 
-        this.router.registerHandler(IPC_CHANNELS.MCP.UPDATE, async (event, name: string, updates: any) => {
-            try {
-                await this.mcpManager.updateServer(name, updates);
-                return { success: true };
-            } catch (err: any) {
-                return { success: false, error: err.message };
-            }
-        });
+        this.router.registerHandler(
+            IPC_CHANNELS.MCP.UPDATE,
+            async (event, name: string, updates: any) => {
+                try {
+                    await this.mcpManager.updateServer(name, updates);
+                    return { success: true };
+                } catch (err: any) {
+                    return { success: false, error: err.message };
+                }
+            },
+        );
 
         this.router.registerHandler(IPC_CHANNELS.MCP.TEST, async (event, name: string) => {
             try {
@@ -72,13 +82,16 @@ export class McpController {
             }
         });
 
-        this.router.registerHandler(IPC_CHANNELS.MCP.CALL_TOOL, async (event, name: string, args: any) => {
-            try {
-                const result = await this.mcpManager.callTool(name, args);
-                return { success: true, result };
-            } catch (err: any) {
-                return { success: false, error: err.message };
-            }
-        });
+        this.router.registerHandler(
+            IPC_CHANNELS.MCP.CALL_TOOL,
+            async (event, name: string, args: any) => {
+                try {
+                    const result = await this.mcpManager.callTool(name, args);
+                    return { success: true, result };
+                } catch (err: any) {
+                    return { success: false, error: err.message };
+                }
+            },
+        );
     }
 }

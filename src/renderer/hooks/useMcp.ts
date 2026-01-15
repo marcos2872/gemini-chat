@@ -10,9 +10,15 @@ interface UseMcpReturn {
     addServer: (server: McpServer) => Promise<void>;
     updateServer: (name: string, updates: Partial<McpServer>) => Promise<void>;
     removeServer: (name: string) => Promise<void>;
-    getPrompt: (serverName: string, promptName: string, args?: Record<string, unknown>) => Promise<any>;
+    getPrompt: (
+        serverName: string,
+        promptName: string,
+        args?: Record<string, unknown>,
+    ) => Promise<any>;
     refresh: () => Promise<void>;
-    testConfig: (server: McpServer) => Promise<{ success: boolean; connected: boolean; error?: string }>;
+    testConfig: (
+        server: McpServer,
+    ) => Promise<{ success: boolean; connected: boolean; error?: string }>;
 }
 
 export function useMcp(): UseMcpReturn {
@@ -34,7 +40,7 @@ export function useMcp(): UseMcpReturn {
             try {
                 const [toolList, promptList] = await Promise.all([
                     window.electronAPI.mcpListTools(),
-                    window.electronAPI.mcpListPrompts()
+                    window.electronAPI.mcpListPrompts(),
                 ]);
                 setTools(toolList);
                 setPrompts(promptList);
@@ -56,47 +62,59 @@ export function useMcp(): UseMcpReturn {
         return () => clearInterval(interval);
     }, [refresh]);
 
-    const addServer = useCallback(async (server: McpServer) => {
-        try {
-            const result = await window.electronAPI.mcpAdd(server);
-            if (!result.success) throw new Error(result.error);
-            await refresh();
-        } catch (err: any) {
-            setError(err.message || 'Failed to add server');
-            throw err;
-        }
-    }, [refresh]);
+    const addServer = useCallback(
+        async (server: McpServer) => {
+            try {
+                const result = await window.electronAPI.mcpAdd(server);
+                if (!result.success) throw new Error(result.error);
+                await refresh();
+            } catch (err: any) {
+                setError(err.message || 'Failed to add server');
+                throw err;
+            }
+        },
+        [refresh],
+    );
 
-    const updateServer = useCallback(async (name: string, updates: Partial<McpServer>) => {
-        try {
-            const result = await window.electronAPI.mcpUpdate(name, updates);
-            if (!result.success) throw new Error(result.error);
-            await refresh();
-        } catch (err: any) {
-            setError(err.message || 'Failed to update server');
-            throw err;
-        }
-    }, [refresh]);
+    const updateServer = useCallback(
+        async (name: string, updates: Partial<McpServer>) => {
+            try {
+                const result = await window.electronAPI.mcpUpdate(name, updates);
+                if (!result.success) throw new Error(result.error);
+                await refresh();
+            } catch (err: any) {
+                setError(err.message || 'Failed to update server');
+                throw err;
+            }
+        },
+        [refresh],
+    );
 
-    const removeServer = useCallback(async (name: string) => {
-        try {
-            const result = await window.electronAPI.mcpRemove(name);
-            if (!result.success) throw new Error(result.error);
-            await refresh();
-        } catch (err: any) {
-            setError(err.message || 'Failed to remove server');
-            throw err;
-        }
-    }, [refresh]);
+    const removeServer = useCallback(
+        async (name: string) => {
+            try {
+                const result = await window.electronAPI.mcpRemove(name);
+                if (!result.success) throw new Error(result.error);
+                await refresh();
+            } catch (err: any) {
+                setError(err.message || 'Failed to remove server');
+                throw err;
+            }
+        },
+        [refresh],
+    );
 
-    const getPrompt = useCallback(async (serverName: string, promptName: string, args: Record<string, unknown> = {}) => {
-        try {
-            return await window.electronAPI.mcpGetPrompt(serverName, promptName, args);
-        } catch (err: any) {
-            console.error('Failed to get prompt:', err);
-            throw err;
-        }
-    }, []);
+    const getPrompt = useCallback(
+        async (serverName: string, promptName: string, args: Record<string, unknown> = {}) => {
+            try {
+                return await window.electronAPI.mcpGetPrompt(serverName, promptName, args);
+            } catch (err: any) {
+                console.error('Failed to get prompt:', err);
+                throw err;
+            }
+        },
+        [],
+    );
 
     const testConfig = useCallback(async (server: McpServer) => {
         try {
@@ -117,6 +135,6 @@ export function useMcp(): UseMcpReturn {
         removeServer,
         getPrompt,
         refresh,
-        testConfig
+        testConfig,
     };
 }

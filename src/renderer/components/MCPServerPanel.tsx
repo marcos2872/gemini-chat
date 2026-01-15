@@ -3,7 +3,15 @@ import { useMcp } from '../hooks';
 import type { McpServer } from '../../shared/types';
 import ServerModal from './ServerModal';
 
-const CollapsibleSection = ({ title, count, children }: { title: string, count: number, children: React.ReactNode }) => {
+const CollapsibleSection = ({
+    title,
+    count,
+    children,
+}: {
+    title: string;
+    count: number;
+    children: React.ReactNode;
+}) => {
     const [isOpen, setIsOpen] = useState(false);
     if (count === 0) return null;
     return (
@@ -18,7 +26,7 @@ const CollapsibleSection = ({ title, count, children }: { title: string, count: 
                     display: 'flex',
                     alignItems: 'center',
                     marginBottom: '4px',
-                    userSelect: 'none'
+                    userSelect: 'none',
                 }}
             >
                 <span style={{ marginRight: '5px', fontSize: '0.6rem' }}>{isOpen ? '▼' : '▶'}</span>
@@ -80,7 +88,9 @@ const MCPServerPanel: React.FC = () => {
 
             // Format messages into a single string to put in the chat input
             if (result && result.messages) {
-                const text = result.messages.map((m: any) => m.content.type === 'text' ? m.content.text : '').join('\n\n');
+                const text = result.messages
+                    .map((m: any) => (m.content.type === 'text' ? m.content.text : ''))
+                    .join('\n\n');
 
                 // Dispatch event to ChatInterface
                 const event = new CustomEvent('set-chat-input', { detail: text });
@@ -92,82 +102,156 @@ const MCPServerPanel: React.FC = () => {
     };
 
     return (
-        <div style={{ width: '100%', height: '100%', backgroundColor: '#252526', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '1rem', borderBottom: '1px solid #3E3E42', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div
+            style={{
+                width: '100%',
+                height: '100%',
+                backgroundColor: '#252526',
+                display: 'flex',
+                flexDirection: 'column',
+            }}
+        >
+            <div
+                style={{
+                    padding: '1rem',
+                    borderBottom: '1px solid #3E3E42',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                }}
+            >
                 <h3 style={{ margin: 0, fontSize: '1rem' }}>MCP Servers</h3>
-                <button onClick={handleAddClick} style={{ background: 'none', border: '1px solid #4B90F5', color: '#4B90F5', borderRadius: '4px', cursor: 'pointer' }}>+</button>
+                <button
+                    onClick={handleAddClick}
+                    style={{
+                        background: 'none',
+                        border: '1px solid #4B90F5',
+                        color: '#4B90F5',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                    }}
+                >
+                    +
+                </button>
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto' }}>
-                {Array.isArray(servers) && servers.map(s => {
-                    const serverTools = tools.filter(t => t.serverName === s.name);
-                    const serverPrompts = prompts.filter(p => p.serverName === s.name);
-                    const isEnabled = s.enabled !== false;
+                {Array.isArray(servers) &&
+                    servers.map((s) => {
+                        const serverTools = tools.filter((t) => t.serverName === s.name);
+                        const serverPrompts = prompts.filter((p) => p.serverName === s.name);
+                        const isEnabled = s.enabled !== false;
 
-                    return (
-                        <div key={s.name} style={{ padding: '0.8rem', borderBottom: '1px solid #3E3E42' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', alignItems: 'center' }}>
-                                <strong>{s.name}</strong>
-                                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '0.8rem' }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={isEnabled}
-                                        onChange={() => handleToggleEnabled(s)}
-                                        style={{ marginRight: '5px' }}
-                                    />
-                                    {isEnabled ? 'On' : 'Off'}
-                                </label>
-                            </div>
-                            <div style={{ fontSize: '0.8rem', color: '#9DA5B4', marginBottom: '0.5rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {s.type === 'sse' ? (
-                                    <span title={s.url}>SSE: {s.url}</span>
-                                ) : (
-                                    <span title={s.command}>{s.command || 'No Command'} {s.args?.join(' ')}</span>
-                                )}
-                            </div>
-                            <CollapsibleSection title="Tools" count={serverTools.length}>
-                                {serverTools.map(t => (
-                                    <span key={t.name} title={t.description} style={{
-                                        fontSize: '0.7rem',
-                                        backgroundColor: '#333',
-                                        padding: '2px 4px',
-                                        borderRadius: '3px',
-                                        border: '1px solid #444'
-                                    }}>
-                                        {t.originalName}
-                                    </span>
-                                ))}
-                            </CollapsibleSection>
-
-                            <CollapsibleSection title="Prompts" count={serverPrompts.length}>
-                                {serverPrompts.map((p, i) => (
-                                    <span
-                                        key={i}
-                                        onClick={() => handlePromptClick(s.name, p.name)}
-                                        title={p.description}
+                        return (
+                            <div
+                                key={s.name}
+                                style={{ padding: '0.8rem', borderBottom: '1px solid #3E3E42' }}
+                            >
+                                <div
+                                    style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        marginBottom: '0.5rem',
+                                        alignItems: 'center',
+                                    }}
+                                >
+                                    <strong>{s.name}</strong>
+                                    <label
                                         style={{
-                                            fontSize: '0.7rem',
-                                            backgroundColor: '#3B2D3B',
-                                            padding: '2px 4px',
-                                            borderRadius: '3px',
-                                            border: '1px solid #444',
-                                            color: '#C586C0',
-                                            cursor: 'pointer'
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            cursor: 'pointer',
+                                            fontSize: '0.8rem',
                                         }}
                                     >
-                                        {p.name}
-                                    </span>
-                                ))}
-                            </CollapsibleSection>
+                                        <input
+                                            type="checkbox"
+                                            checked={isEnabled}
+                                            onChange={() => handleToggleEnabled(s)}
+                                            style={{ marginRight: '5px' }}
+                                        />
+                                        {isEnabled ? 'On' : 'Off'}
+                                    </label>
+                                </div>
+                                <div
+                                    style={{
+                                        fontSize: '0.8rem',
+                                        color: '#9DA5B4',
+                                        marginBottom: '0.5rem',
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                    }}
+                                >
+                                    {s.type === 'sse' ? (
+                                        <span title={s.url}>SSE: {s.url}</span>
+                                    ) : (
+                                        <span title={s.command}>
+                                            {s.command || 'No Command'} {s.args?.join(' ')}
+                                        </span>
+                                    )}
+                                </div>
+                                <CollapsibleSection title="Tools" count={serverTools.length}>
+                                    {serverTools.map((t) => (
+                                        <span
+                                            key={t.name}
+                                            title={t.description}
+                                            style={{
+                                                fontSize: '0.7rem',
+                                                backgroundColor: '#333',
+                                                padding: '2px 4px',
+                                                borderRadius: '3px',
+                                                border: '1px solid #444',
+                                            }}
+                                        >
+                                            {t.originalName}
+                                        </span>
+                                    ))}
+                                </CollapsibleSection>
 
-                            < div style={{ display: 'flex', gap: '5px' }}>
-                                <button onClick={() => handleEditClick(s)} style={{ fontSize: '0.7rem', padding: '2px 5px' }}>Edit</button>
-                                <button onClick={() => handleDelete(s.name)} style={{ fontSize: '0.7rem', padding: '2px 5px', color: '#ff4444' }}>Del</button>
+                                <CollapsibleSection title="Prompts" count={serverPrompts.length}>
+                                    {serverPrompts.map((p, i) => (
+                                        <span
+                                            key={i}
+                                            onClick={() => handlePromptClick(s.name, p.name)}
+                                            title={p.description}
+                                            style={{
+                                                fontSize: '0.7rem',
+                                                backgroundColor: '#3B2D3B',
+                                                padding: '2px 4px',
+                                                borderRadius: '3px',
+                                                border: '1px solid #444',
+                                                color: '#C586C0',
+                                                cursor: 'pointer',
+                                            }}
+                                        >
+                                            {p.name}
+                                        </span>
+                                    ))}
+                                </CollapsibleSection>
+
+                                <div style={{ display: 'flex', gap: '5px' }}>
+                                    <button
+                                        onClick={() => handleEditClick(s)}
+                                        style={{ fontSize: '0.7rem', padding: '2px 5px' }}
+                                    >
+                                        Edit
+                                    </button>
+                                    <button
+                                        onClick={() => handleDelete(s.name)}
+                                        style={{
+                                            fontSize: '0.7rem',
+                                            padding: '2px 5px',
+                                            color: '#ff4444',
+                                        }}
+                                    >
+                                        Del
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                    );
-                })}
-            </div >
+                        );
+                    })}
+            </div>
 
             {showModal && (
                 <ServerModal
@@ -176,7 +260,7 @@ const MCPServerPanel: React.FC = () => {
                     onSave={handleSave}
                 />
             )}
-        </div >
+        </div>
     );
 };
 

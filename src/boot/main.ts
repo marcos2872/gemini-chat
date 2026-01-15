@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, nativeImage } from 'electron';
+import { app, BrowserWindow, shell, nativeImage } from 'electron';
 import * as path from 'path';
 import { GeminiClient } from './gemini-client';
 import { ConversationStorage } from './conversation-storage';
@@ -36,9 +36,10 @@ function setActiveConversation(conv: Conversation): void {
 }
 
 function createWindow() {
-    const iconPath = process.platform === 'win32'
-        ? path.join(__dirname, '../../../logos/logo.ico')
-        : path.join(__dirname, '../../../logos/logo.png');
+    const iconPath =
+        process.platform === 'win32'
+            ? path.join(__dirname, '../../../logos/logo.ico')
+            : path.join(__dirname, '../../../logos/logo.png');
 
     const appIcon = nativeImage.createFromPath(iconPath);
 
@@ -51,8 +52,8 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
             nodeIntegration: false,
-            sandbox: true
-        }
+            sandbox: true,
+        },
     });
 
     if (process.env.IS_DEV) {
@@ -81,8 +82,23 @@ app.whenReady().then(async () => {
     createWindow();
 
     // Init Controllers
-    new GeminiController(router, gemini, mcpService, storage, getActiveConversation, setActiveConversation);
-    new AuthController(router, copilotClient, copilotAuth, mcpService, storage, getActiveConversation, setActiveConversation);
+    new GeminiController(
+        router,
+        gemini,
+        mcpService,
+        storage,
+        getActiveConversation,
+        setActiveConversation,
+    );
+    new AuthController(
+        router,
+        copilotClient,
+        copilotAuth,
+        mcpService,
+        storage,
+        getActiveConversation,
+        setActiveConversation,
+    );
     new McpController(router, mcpService);
 
     // Register generic handlers
@@ -108,8 +124,13 @@ app.whenReady().then(async () => {
     });
 
     router.registerHandler(IPC_CHANNELS.CONVERSATION.LIST, async () => storage.listConversations());
-    router.registerHandler(IPC_CHANNELS.CONVERSATION.DELETE, async (event, id: string) => storage.deleteConversation(id));
-    router.registerHandler(IPC_CHANNELS.CONVERSATION.EXPORT, async (event, id: string, format: string) => storage.exportConversation(id, format));
+    router.registerHandler(IPC_CHANNELS.CONVERSATION.DELETE, async (event, id: string) =>
+        storage.deleteConversation(id),
+    );
+    router.registerHandler(
+        IPC_CHANNELS.CONVERSATION.EXPORT,
+        async (event, id: string, format: string) => storage.exportConversation(id, format),
+    );
     router.registerHandler(IPC_CHANNELS.CONVERSATION.SYNC, async (event, conversation: any) => {
         try {
             activeConversation = conversation;
@@ -122,11 +143,14 @@ app.whenReady().then(async () => {
 
     // Connect to MCP servers on startup
     log.info('Connecting to MCP servers...');
-    mcpService.init().then(() => {
-        log.info('MCP servers connected');
-    }).catch(err => {
-        log.error('Failed to connect to MCP servers', { error: err.message });
-    });
+    mcpService
+        .init()
+        .then(() => {
+            log.info('MCP servers connected');
+        })
+        .catch((err) => {
+            log.error('Failed to connect to MCP servers', { error: err.message });
+        });
 
     app.on('activate', function () {
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -138,4 +162,3 @@ app.on('window-all-closed', function () {
     gemini.shutdown();
     if (process.platform !== 'darwin') app.quit();
 });
-

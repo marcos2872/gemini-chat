@@ -50,21 +50,24 @@ export function useConversation(): UseConversationReturn {
         }
     }, []);
 
-    const createConversation = useCallback(async (options?: { model?: string }): Promise<Conversation> => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const conv = await window.electronAPI.conversationNew(options);
-            setConversation(conv);
-            setMessages([]);
-            return conv;
-        } catch (err: any) {
-            setError(err.message || 'Failed to create conversation');
-            throw err;
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
+    const createConversation = useCallback(
+        async (options?: { model?: string }): Promise<Conversation> => {
+            setIsLoading(true);
+            setError(null);
+            try {
+                const conv = await window.electronAPI.conversationNew(options);
+                setConversation(conv);
+                setMessages([]);
+                return conv;
+            } catch (err: any) {
+                setError(err.message || 'Failed to create conversation');
+                throw err;
+            } finally {
+                setIsLoading(false);
+            }
+        },
+        [],
+    );
 
     const syncConversation = useCallback(async (conv: Conversation) => {
         try {
@@ -74,29 +77,35 @@ export function useConversation(): UseConversationReturn {
         }
     }, []);
 
-    const addMessage = useCallback((message: Message) => {
-        setMessages(prev => [...prev, message]);
-        if (conversation) {
-            const updated = {
-                ...conversation,
-                messages: [...(conversation.messages || []), message],
-            };
-            setConversation(updated);
-        }
-    }, [conversation]);
+    const addMessage = useCallback(
+        (message: Message) => {
+            setMessages((prev) => [...prev, message]);
+            if (conversation) {
+                const updated = {
+                    ...conversation,
+                    messages: [...(conversation.messages || []), message],
+                };
+                setConversation(updated);
+            }
+        },
+        [conversation],
+    );
 
-    const updateMessage = useCallback((id: string, updates: Partial<Message>) => {
-        setMessages(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
-        if (conversation) {
-            const updatedMsgs = (conversation.messages || []).map(m =>
-                m.id === id ? { ...m, ...updates } : m
-            );
-            setConversation({
-                ...conversation,
-                messages: updatedMsgs // Note: this doesn't sync to backend yet, just local state
-            });
-        }
-    }, [conversation]);
+    const updateMessage = useCallback(
+        (id: string, updates: Partial<Message>) => {
+            setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...updates } : m)));
+            if (conversation) {
+                const updatedMsgs = (conversation.messages || []).map((m) =>
+                    m.id === id ? { ...m, ...updates } : m,
+                );
+                setConversation({
+                    ...conversation,
+                    messages: updatedMsgs, // Note: this doesn't sync to backend yet, just local state
+                });
+            }
+        },
+        [conversation],
+    );
 
     const listConversations = useCallback(async (): Promise<ConversationSummary[]> => {
         try {

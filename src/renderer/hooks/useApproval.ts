@@ -34,6 +34,6 @@ export function useApproval(): UseApprovalReturn {
     return {
         approvalRequest,
         approve,
-        deny
+        deny,
     };
 }

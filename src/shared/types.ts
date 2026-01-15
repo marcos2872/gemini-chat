@@ -5,7 +5,7 @@
 
 // ============= Message Types =============
 
-export type MessageRole = "user" | "assistant" | "system";
+export type MessageRole = 'user' | 'assistant' | 'system';
 
 export interface Message {
     id: string;
@@ -31,7 +31,7 @@ export interface Conversation {
     id: string;
     title?: string;
     model?: string;
-    provider?: "gemini" | "copilot";
+    provider?: 'gemini' | 'copilot';
     messages: Message[];
     /** ISO timestamp string - when conversation started */
     startTime: string;
@@ -52,7 +52,7 @@ export interface ConversationSummary {
 
 // ============= MCP Types =============
 
-export type McpServerType = "stdio" | "sse";
+export type McpServerType = 'stdio' | 'sse';
 
 export interface McpServer {
     name: string;
@@ -111,12 +111,16 @@ export interface IMcpManager {
     getAllTools(): Promise<McpTool[]>;
     callTool(name: string, args: Record<string, unknown>): Promise<unknown>;
     getAllPrompts(): Promise<McpPrompt[]>;
-    getPrompt(serverName: string, promptName: string, args?: Record<string, unknown>): Promise<unknown>;
+    getPrompt(
+        serverName: string,
+        promptName: string,
+        args?: Record<string, unknown>,
+    ): Promise<unknown>;
 }
 
 // ============= Approval Callback Type =============
 
 export type ApprovalCallback = (
     toolName: string,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
 ) => Promise<boolean>;

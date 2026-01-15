@@ -3,7 +3,10 @@ import { logger } from './logger';
 
 const log = logger.ipc;
 
-export type IpcHandler = (event: IpcMainInvokeEvent | IpcMainEvent, ...args: any[]) => Promise<any> | any;
+export type IpcHandler = (
+    event: IpcMainInvokeEvent | IpcMainEvent,
+    ...args: any[]
+) => Promise<any> | any;
 
 export class IpcRouter {
     registerHandler(channel: string, handler: IpcHandler) {
@@ -19,4 +22,3 @@ export class IpcRouter {
         log.debug('Listener registered', { channel });
     }
 }
-
