@@ -10,6 +10,12 @@ import { app } from "electron";
 // Estes são os mesmos do guia para Desktop
 const CLIENT_ID =
   "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com";
+// OAuth Secret value used to initiate OAuth2Client class.
+// Note: It's ok to save this in git because this is an installed application
+// as described here: https://developers.google.com/identity/protocols/oauth2#installed
+// "The process results in a client ID and, in some cases, a client secret,
+// which you embed in the source code of your application. (In this context,
+// the client secret is obviously not treated as a secret.)"
 const CLIENT_SECRET = "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";
 const SCOPES = [
   "https://www.googleapis.com/auth/cloud-platform",
