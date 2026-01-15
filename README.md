@@ -29,12 +29,7 @@ O grande diferencial do projeto é a **integração nativa com MCP (Model Contex
     npm install
     ```
 
-2.  Crie um arquivo `.env` na raiz do projeto com sua chave Gemini:
-    ```env
-    GEMINI_API_KEY=sua_chave_aqui
-    ```
-
-3.  Inicie em modo de desenvolvimento:
+2.  Inicie em modo de desenvolvimento:
     ```bash
     npm run dev
     ```
