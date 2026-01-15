@@ -1,7 +1,7 @@
-# Gemini Desktop
+# IA-Chat
 
 ## Sobre o Projeto
-**Gemini Desktop** é uma aplicação desktop desenvolvida com Electron e React que traz o poder dos modelos Gemini do Google para o seu computador. O projeto foca em oferecer uma interface de chat moderna e, principalmente, integração robusta com o **Protocolo de Contexto de Modelo (MCP)**, permitindo que o modelo execute ferramentas no seu sistema (como listar arquivos, ler documentos, etc.) de forma segura.
+**IA-Chat** é uma aplicação desktop desenvolvida com Electron e React que traz o poder dos modelos Gemini do Google e Github Copilot para o seu computador. O projeto foca em oferecer uma interface de chat moderna e, principalmente, integração robusta com o **Protocolo de Contexto de Modelo (MCP)**, permitindo que o modelo execute ferramentas no seu sistema (como listar arquivos, ler documentos, etc.) de forma segura.
 
 ### Principais Funcionalidades
 *   **Chat com Gemini**: Converse com diferentes modelos (Flash, Pro, etc.).

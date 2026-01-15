@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, nativeImage } from 'electron';
 import * as path from 'path';
 import { GeminiClient } from './gemini-client';
 import { ConversationStorage } from './conversation-storage';
@@ -37,10 +37,19 @@ function setActiveConversation(conv: any) {
 }
 
 function createWindow() {
+    const iconPath = process.platform === 'win32'
+        ? path.join(__dirname, '../../../logos/logo.ico')
+        : path.join(__dirname, '../../../logos/logo.png');
+
+    const appIcon = nativeImage.createFromPath(iconPath);
+    console.log('[Main] Icon Path:', iconPath);
+    console.log('[Main] Icon loaded?', !appIcon.isEmpty());
+
     mainWindow = new BrowserWindow({
         width: 1200,
         height: 800,
         backgroundColor: '#1E1E1E',
+        icon: appIcon,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
