@@ -382,4 +382,13 @@ export class CopilotClient {
     getHistory() {
         return this.history;
     }
+
+    reset() {
+        this.oauthToken = null;
+        this.apiToken = null;
+        this.apiEndpoint = null;
+        this.tokenExpiresAt = 0;
+        this.tokenExchangePromise = null;
+        log.info('Copilot client session reset');
+    }
 }

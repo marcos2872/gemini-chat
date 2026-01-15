@@ -43,6 +43,7 @@ export class AuthController {
                     store.set('github_token', token);
                 } else {
                     store.delete('github_token');
+                    this.copilotClient.reset();
                 }
                 return true;
             },
