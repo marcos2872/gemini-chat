@@ -75,7 +75,7 @@ export class CopilotService {
     }
 
     this.currentChunkHandler = onChunk;
-    const model = options?.model || "gpt-4o";
+    const model = options?.model || "gpt-5-mini";
 
     try {
       console.log("[CopilotService] Calling backend chatStream...");

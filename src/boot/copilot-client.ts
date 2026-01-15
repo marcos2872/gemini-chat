@@ -25,14 +25,17 @@ export class CopilotClient {
     public history: any[];
     private timeoutMs: number;
 
+    private tokenExchangePromise: Promise<void> | null;
+
     constructor() {
         this.oauthToken = null;
         this.apiToken = null;
         this.apiEndpoint = null;
         this.tokenExpiresAt = 0;
-        this.modelName = 'gpt-4o'; // Default to a standard model
+        this.modelName = 'gpt-5-mini'; // Default to a standard model gpt-5-mini GPT-5.1 Grok Code Fast 1  grok-code-fast-1
         this.history = [];
         this.timeoutMs = 30000;
+        this.tokenExchangePromise = null;
     }
 
     async initialize(oauthToken: string) {
@@ -44,47 +47,46 @@ export class CopilotClient {
     private async exchangeToken() {
         if (!this.oauthToken) throw new Error("No OAuth token provided");
 
-        // Simple check if existing token is valid (e.g. valid for 25 mins, refresh every 25? Token usually valid for 30m)
+        // Simple check if existing token is valid
         if (this.apiToken && Date.now() < this.tokenExpiresAt) return;
 
-        console.log("[CopilotClient] Exchanging OAuth token for API Token...");
-        try {
-            const response = await fetch("https://api.github.com/copilot_internal/v2/token", {
-                headers: {
-                    ...DEFAULT_HEADERS,
-                    "Authorization": `token ${this.oauthToken}`
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error(`Token exchange failed: ${response.status}`);
-            }
-
-            const data = await response.json();
-            if (!data.token || !data.endpoints?.api) {
-                // Fallback or strict check? Usually 'token' is the key (it's actually 'token' field in JSON? or 'access_token'?)
-                // GitHub Copilot returned JSON often has `token` (the api key) and `expires_at`.
-                // Let's assume standard Copilot response structure.
-                // Actually COPILOT_CHAT_URLS.md says: expects JSON containing api_endpoint and api_key.
-                // Let's inspect data structure based on common knowledge or just use what we get.
-                // Returing data usually: { token: "...", endpoints: { api: "..." }, expires_at: ... }
-            }
-
-            // Adjust based on typical Zed/VSCode implementations:
-            // data.token is the API Key.
-            // data.endpoints.api is the base URL.
-
-            this.apiToken = data.token;
-            // Ensure endpoint doesn't have trailing slash
-            this.apiEndpoint = data.endpoints?.api?.replace(/\/$/, '') || "https://api.githubcopilot.com";
-            this.tokenExpiresAt = (data.expires_at || (Date.now() / 1000 + 1500)) * 1000; // default 25 min
-
-            console.log(`[CopilotClient] Token exchanged. Endpoint: ${this.apiEndpoint}`);
-
-        } catch (error: any) {
-            console.error("[CopilotClient] Token exchange error:", error.message);
-            throw error;
+        // Return existing promise if exchange is in progress
+        if (this.tokenExchangePromise) {
+            return this.tokenExchangePromise;
         }
+
+        this.tokenExchangePromise = (async () => {
+            try {
+                console.log("[CopilotClient] Exchanging OAuth token for API Token...");
+                const response = await fetch("https://api.github.com/copilot_internal/v2/token", {
+                    headers: {
+                        ...DEFAULT_HEADERS,
+                        "Authorization": `token ${this.oauthToken}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Token exchange failed: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                this.apiToken = data.token;
+                // Ensure endpoint doesn't have trailing slash
+                this.apiEndpoint = data.endpoints?.api?.replace(/\/$/, '') || "https://api.githubcopilot.com";
+                this.tokenExpiresAt = (data.expires_at || (Date.now() / 1000 + 1500)) * 1000; // default 25 min
+
+                console.log(`[CopilotClient] Token exchanged. Endpoint: ${this.apiEndpoint}`);
+
+            } catch (error: any) {
+                console.error("[CopilotClient] Token exchange error:", error.message);
+                throw error;
+            } finally {
+                this.tokenExchangePromise = null;
+            }
+        })();
+
+        return this.tokenExchangePromise;
     }
 
     async setApiKey(key: string) {
