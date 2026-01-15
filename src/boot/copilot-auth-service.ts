@@ -14,7 +14,6 @@ export class CopilotAuthService {
      * @param {string} clientId 
      */
     async requestDeviceCode(clientId: string) {
-        console.log(`[CopilotAuthService] Requesting device code for client: ${clientId}`);
 
         try {
             const response = await fetch(GITHUB_DEVICE_CODE_URL, {
@@ -42,7 +41,6 @@ export class CopilotAuthService {
             }
 
             const data = await response.json();
-            console.log('[CopilotAuthService] Device Code Response:', data);
 
             // Check for functional errors inside 200 OK
             if (data.error) {
@@ -68,7 +66,6 @@ export class CopilotAuthService {
         const timeout = 600 * 1000; // 10 min timeout
         const start = Date.now();
 
-        console.log('[CopilotAuthService] Starting poll for token...');
 
         while (Date.now() - start < timeout) {
             try {
@@ -97,17 +94,13 @@ export class CopilotAuthService {
 
                     if (data.error) {
                         if (data.error === "authorization_pending") {
-                            // Continue polling
-                            // console.debug('[CopilotAuthService] authorization_pending...');
                         } else if (data.error === "slow_down") {
-                            console.log('[CopilotAuthService] Received slow_down, increasing interval');
                             pollInterval += 5;
                         } else {
                             // Fatal error (e.g., expired_token, access_denied)
                             throw new Error(data.error_description || data.error);
                         }
                     } else if (data.access_token) {
-                        console.log('[CopilotAuthService] Token received successfully.');
                         return {
                             accessToken: data.access_token,
                             tokenType: data.token_type,

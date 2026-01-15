@@ -5,6 +5,9 @@ import { McpService } from "../mcp/McpService";
 import { ConversationStorage } from "../conversation-storage";
 import { BrowserWindow } from "electron";
 import * as crypto from "crypto";
+import { logger } from '../lib/logger';
+
+const log = logger.gemini;
 
 export class GeminiController {
   constructor(
@@ -95,9 +98,7 @@ export class GeminiController {
     const activeConversation = this.getActiveConversation();
 
     try {
-      console.log(
-        `[GeminiController] Received prompt: ${prompt.substring(0, 50)}...`
-      );
+      log.debug('Received prompt', { prompt: prompt.substring(0, 50) });
 
       // Add User Message
       const userMsg = {
@@ -146,10 +147,10 @@ export class GeminiController {
                   role: "system",
                   content: approved
                     ? `✅ Allowed: ${toolName}\nArgs: ${JSON.stringify(
-                        args,
-                        null,
-                        2
-                      )}`
+                      args,
+                      null,
+                      2
+                    )}`
                     : `❌ Denied: ${toolName}`,
                   timestamp: new Date().toISOString(),
                 };

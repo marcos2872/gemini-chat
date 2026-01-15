@@ -6,6 +6,9 @@ import { McpService } from '../mcp/McpService';
 import { ConversationStorage } from '../conversation-storage';
 import { BrowserWindow } from 'electron';
 import * as crypto from 'crypto';
+import { logger } from '../lib/logger';
+
+const log = logger.copilot;
 
 export class AuthController {
     constructor(
@@ -92,7 +95,7 @@ export class AuthController {
                 timestamp: m.timestamp || new Date().toISOString()
             }));
 
-            console.log(`[AuthController] Forwarding prompt to Copilot: ${lastMsg.content.substring(0, 50)}...`);
+            log.debug('Forwarding prompt to Copilot', { prompt: lastMsg.content.substring(0, 50) });
 
             await this.mcpManager.connectAll();
 
@@ -137,7 +140,7 @@ export class AuthController {
 
             return { success: true };
         } catch (err: any) {
-            console.error('[AuthController] Copilot chat error:', err);
+            log.error('Copilot chat error', { error: err.message });
             return { success: false, error: err.message };
         }
     }

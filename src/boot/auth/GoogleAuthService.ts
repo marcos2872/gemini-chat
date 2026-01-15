@@ -5,6 +5,9 @@ import open from "open";
 import fs from "fs";
 import path from "path";
 import { app } from "electron";
+import { logger } from "../lib/logger";
+
+const log = logger.auth;
 
 // Credenciais do cliente OAuth (Idealmente viriam de variáveis de ambiente seguras ou build time)
 // Estes são os mesmos do guia para Desktop
@@ -69,7 +72,7 @@ export class GoogleAuthService {
       if (fs.existsSync(this.tokenPath)) fs.unlinkSync(this.tokenPath);
       this.client.setCredentials({});
     } catch (e) {
-      console.error(e);
+      log.error('Sign out error', { error: e });
     }
   }
 
@@ -92,7 +95,7 @@ export class GoogleAuthService {
       // O google-auth-library faz refresh automático se tiver refresh_token
       return true;
     } catch (error) {
-      console.error("[Auth] Failed to load saved tokens:", error);
+      log.error('Failed to load saved tokens', { error });
       return false;
     }
   }
@@ -117,7 +120,7 @@ export class GoogleAuthService {
               const { tokens } = await this.client.getToken(code);
               this.client.setCredentials(tokens);
               this.saveTokens(tokens);
-              console.log("[Auth] Login successful.");
+              log.info('Login successful');
               resolve();
             } else {
               res.end("Authentication failed: No code found.");
@@ -138,7 +141,7 @@ export class GoogleAuthService {
           scope: SCOPES,
         });
 
-        console.log("[Auth] Opening browser for login...");
+        log.info('Opening browser for login');
         await open(authorizeUrl);
       });
     });
@@ -148,7 +151,7 @@ export class GoogleAuthService {
     try {
       fs.writeFileSync(this.tokenPath, JSON.stringify(tokens));
     } catch (error) {
-      console.error("[Auth] Failed to save tokens:", error);
+      log.error('Failed to save tokens', { error });
     }
   }
 

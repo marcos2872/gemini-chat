@@ -4,6 +4,9 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { URL } from "url";
+import { logger } from '../lib/logger';
+
+const log = logger.mcp;
 
 export class McpService {
   private configService: McpConfigService;
@@ -102,7 +105,7 @@ export class McpService {
     if (!client)
       throw new Error(`Server ${serverName} is not connected or not found.`);
 
-    console.log(`[MCP] Calling tool ${toolName} on ${serverName}...`);
+    log.debug('Calling tool', { tool: toolName, server: serverName });
     const result = await client.callTool({
       name: toolName,
       arguments: args,
@@ -121,7 +124,7 @@ export class McpService {
       const parsed = JSON.parse(innerText);
       obj.content[0].text = JSON.stringify(parsed);
     } catch (e) {
-      console.error("[MCP] Failed to parse JSON:", e);
+      // Silent fail for non-JSON content
     }
     return obj;
   }
@@ -163,7 +166,7 @@ export class McpService {
     });
 
     await this.configService.saveServers(servers);
-    console.log(`[MCP] Server "${server.name}" added.`);
+    log.info('Server added', { server: server.name });
 
     // Auto connect
     await this.connectionManager.connectToServer(server);
@@ -178,7 +181,7 @@ export class McpService {
 
     await this.connectionManager.disconnectServer(name);
     await this.configService.saveServers(filtered);
-    console.log(`[MCP] Server "${name}" removed.`);
+    log.info('Server removed', { server: name });
   }
 
   async updateServer(name: string, updates: Partial<MCPServer>) {
@@ -207,11 +210,11 @@ export class McpService {
       (!oldEnabled || !this.connectionManager.hasConnection(name)) &&
       newEnabled === true
     ) {
-      console.log(`[MCP] Enabling server ${name}, connecting...`);
+      log.info('Enabling server', { server: name });
       await this.connectionManager.connectToServer(servers[index]);
     }
 
-    console.log(`[MCP] Server "${name}" updated.`);
+    log.info('Server updated', { server: name });
   }
 
   async testConfig(config: MCPServer) {
@@ -228,10 +231,10 @@ export class McpService {
           }),
           redirectUrl: undefined,
           clientInformation: async () => undefined,
-          saveClientInformation: async () => {},
-          saveTokens: async () => {},
-          redirectToAuthorization: async () => {},
-          saveCodeVerifier: async () => {},
+          saveClientInformation: async () => { },
+          saveTokens: async () => { },
+          redirectToAuthorization: async () => { },
+          saveCodeVerifier: async () => { },
           codeVerifier: async () => "",
         };
       }
@@ -256,12 +259,12 @@ export class McpService {
     try {
       await client.connect(transport);
       await client.listTools();
-      await transport.close().catch(() => {});
+      await transport.close().catch(() => { });
       return true;
     } catch (e) {
       try {
-        await transport.close().catch(() => {});
-      } catch {}
+        await transport.close().catch(() => { });
+      } catch { }
       throw e;
     }
   }

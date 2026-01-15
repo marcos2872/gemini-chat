@@ -1,6 +1,9 @@
 import { GoogleAuthService } from "./auth/GoogleAuthService";
 import { v4 as uuidv4 } from "uuid";
 import { OAuth2Client } from "google-auth-library";
+import { logger } from "./lib/logger";
+
+const log = logger.gemini;
 
 // Internal API Constants
 const ENDPOINT = "https://cloudcode-pa.googleapis.com/v1internal";
@@ -55,9 +58,7 @@ export class GeminiClient {
       const accessToken = await this.client.getAccessToken();
       if (!accessToken.token)
         throw new Error("Failed to retrieve access token");
-      console.log(
-        `[Gemini] Client Initialized (Internal API mode). Model: ${this.modelName}`
-      );
+      log.info('Client initialized (Internal API mode)', { model: this.modelName });
     } catch (error) {
       // Silent fail expected
     }
@@ -69,7 +70,7 @@ export class GeminiClient {
 
   async setModel(model: string) {
     this.modelName = model;
-    console.log(`[Gemini] Model set to ${model}`);
+    log.info('Model changed', { model });
   }
 
   isConfigured() {
@@ -89,7 +90,7 @@ export class GeminiClient {
     if (!this.client) throw new Error("Not authenticated");
     if (this.projectId) return this.projectId;
 
-    console.log("[Gemini Setup] Handshaking...");
+    log.debug('Performing handshake...');
     const userProjectId = undefined;
     const loadReq = {
       cloudaicompanionProject: userProjectId,
@@ -119,7 +120,7 @@ export class GeminiClient {
     );
 
     while (!lro.done && lro.name) {
-      console.log("[Gemini Setup] Waiting for onboarding...");
+      log.debug('Waiting for onboarding...');
       await new Promise((r) => setTimeout(r, 2000));
       const opRes = await this.client.request({
         url: `${ENDPOINT}/${lro.name}`,
@@ -190,7 +191,7 @@ export class GeminiClient {
         projectId
       );
 
-      console.log(`[Gemini] Sending Request (Turn ${turn})...`);
+      log.debug('Sending request', { turn });
       const stream = await this.sendInternalChat(this.client, payload);
 
       // Parse Full Response
@@ -205,7 +206,7 @@ export class GeminiClient {
         .map((p) => p.functionCall!);
 
       if (functionCalls.length > 0) {
-        console.log(`[Gemini] Received ${functionCalls.length} tool calls.`);
+        log.info('Received tool calls', { count: functionCalls.length });
 
         for (const call of functionCalls) {
           // Approval
@@ -219,9 +220,9 @@ export class GeminiClient {
           let result: any;
           try {
             result = await mcpManager.callTool(call.name, call.args);
-            console.log(`[Gemini] Tool ${call.name} executed.`);
+            log.debug('Tool executed', { tool: call.name });
           } catch (e: any) {
-            console.error(`[Gemini] Tool ${call.name} failed:`, e);
+            log.error('Tool execution failed', { tool: call.name, error: e.message });
             result = { error: e.message };
           }
 
@@ -303,7 +304,7 @@ export class GeminiClient {
         if (jsonStr === "[DONE]") continue;
         try {
           results.push(JSON.parse(jsonStr));
-        } catch (e) {}
+        } catch (e) { }
       }
     }
     return results;
@@ -409,7 +410,7 @@ export class GeminiClient {
   shutdown() {
     this.client = null;
     this.projectId = undefined;
-    console.log("[Gemini] Client shut down.");
+    log.info('Client shut down');
   }
 
   async signOut() {

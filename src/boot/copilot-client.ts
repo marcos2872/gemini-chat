@@ -1,6 +1,9 @@
 const GITHUB_API_USER_URL = "https://api.github.com/user";
 const GITHUB_MODELS_CATALOG_URL = "https://models.github.ai/catalog/models";
 const GITHUB_INFERENCE_URL = "https://models.github.ai/inference/chat/completions";
+import { logger } from "./lib/logger";
+
+const log = logger.copilot;
 
 const DEFAULT_HEADERS = {
     "Accept": "application/json",
@@ -41,7 +44,7 @@ export class CopilotClient {
     async initialize(oauthToken: string) {
         this.oauthToken = oauthToken;
         await this.exchangeToken();
-        console.log(`[Copilot] Initialized with model: ${this.modelName}`);
+        log.info('Initialized', { model: this.modelName });
     }
 
     private async exchangeToken() {
@@ -57,7 +60,7 @@ export class CopilotClient {
 
         this.tokenExchangePromise = (async () => {
             try {
-                console.log("[CopilotClient] Exchanging OAuth token for API Token...");
+                log.debug('Exchanging OAuth token for API Token...');
                 const response = await fetch("https://api.github.com/copilot_internal/v2/token", {
                     headers: {
                         ...DEFAULT_HEADERS,
@@ -76,10 +79,10 @@ export class CopilotClient {
                 this.apiEndpoint = data.endpoints?.api?.replace(/\/$/, '') || "https://api.githubcopilot.com";
                 this.tokenExpiresAt = (data.expires_at || (Date.now() / 1000 + 1500)) * 1000; // default 25 min
 
-                console.log(`[CopilotClient] Token exchanged. Endpoint: ${this.apiEndpoint}`);
+                log.debug('Token exchanged', { endpoint: this.apiEndpoint });
 
             } catch (error: any) {
-                console.error("[CopilotClient] Token exchange error:", error.message);
+                log.error('Token exchange error', { error: error.message });
                 throw error;
             } finally {
                 this.tokenExchangePromise = null;
@@ -128,7 +131,7 @@ export class CopilotClient {
      * @param {string} modelName
      */
     async setModel(modelName: string) {
-        console.log(`[Copilot] Switching model to: ${modelName}`);
+        log.info('Model changed', { model: modelName });
         this.modelName = modelName;
     }
 
@@ -142,12 +145,12 @@ export class CopilotClient {
         try {
             await this.exchangeToken();
         } catch (e) {
-            console.warn("[CopilotClient] Token exchange failed during listModels:", e);
+            log.warn('Token exchange failed during listModels', { error: e });
             return [];
         }
 
         try {
-            console.log("[CopilotClient] Fetching models...");
+            log.debug('Fetching models');
 
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -165,7 +168,7 @@ export class CopilotClient {
             clearTimeout(timeoutId);
 
             if (!response.ok) {
-                console.warn(`[CopilotClient] Failed to fetch models: ${response.status}`);
+                log.warn('Failed to fetch models', { status: response.status });
                 return [];
             }
 
@@ -194,7 +197,7 @@ export class CopilotClient {
             }));
 
         } catch (error: any) {
-            console.warn("[CopilotClient] Failed to fetch models:", error.message);
+            log.warn('Failed to fetch models', { error: error.message });
             return [];
         }
     }
@@ -234,7 +237,7 @@ export class CopilotClient {
 
         while (turn < maxTurns) {
             try {
-                console.log(`[Copilot] Sending prompt to ${this.modelName} (Turn ${turn + 1})...`);
+                log.debug('Sending prompt', { model: this.modelName, turn: turn + 1 });
                 const payload: any = {
                     messages: messages,
                     model: this.modelName,
@@ -283,7 +286,7 @@ export class CopilotClient {
                     messages.push(message);
 
                     if (message.tool_calls && message.tool_calls.length > 0) {
-                        console.log('[Copilot] Model requested tool calls:', JSON.stringify(message.tool_calls));
+                        log.info('Tool calls requested', { tools: message.tool_calls.map((t: any) => t.function.name) });
 
                         // Execute Tools
                         for (const toolCall of message.tool_calls) {
@@ -293,14 +296,14 @@ export class CopilotClient {
                             try {
                                 args = JSON.parse(argsString);
                             } catch (e) {
-                                console.error(`[Copilot] Failed to parse args for ${functionName}:`, argsString);
+                                log.error('Failed to parse tool args', { tool: functionName, args: argsString });
                             }
 
                             // Approval
                             if (typeof onApproval === 'function') {
                                 const approved = await onApproval(functionName, args);
                                 if (!approved) {
-                                    console.log(`[Copilot] Tool execution for ${functionName} rejected.`);
+                                    log.warn('Tool execution rejected', { tool: functionName });
                                     throw new Error("User denied tool execution.");
                                 }
                             }
@@ -313,7 +316,7 @@ export class CopilotClient {
                                 result = { error: err.message };
                             }
 
-                            console.log(`[Copilot] Tool result for ${functionName}:`, result);
+                            log.debug('Tool result', { tool: functionName, result });
 
                             // Append Tool Output
                             messages.push({

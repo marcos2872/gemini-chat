@@ -3,6 +3,9 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { URL } from 'url';
 import { MCPServer } from './McpConfigService';
+import { logger } from '../lib/logger';
+
+const log = logger.mcp;
 
 // Simple Auth Provider for static tokens
 class SimpleAuthProvider {
@@ -53,7 +56,7 @@ export class McpConnectionManager {
         if (server.enabled === false) return;
         if (this.clients.has(server.name)) return; // Already connected
 
-        console.log(`[MCP] Connecting to ${server.name}...`);
+        log.debug('Connecting', { server: server.name });
 
         try {
             let transport: StdioClientTransport | SSEClientTransport;
@@ -88,14 +91,14 @@ export class McpConnectionManager {
 
             this.clients.set(server.name, client);
             this.transports.set(server.name, transport);
-            console.log(`[MCP] Connected to ${server.name}`);
+            log.info('Connected', { server: server.name });
         } catch (error) {
-            console.error(`[MCP] Failed to connect to ${server.name}:`, error);
+            log.error('Connection failed', { server: server.name, error });
         }
     }
 
     async disconnectServer(name: string) {
-        console.log(`[MCP] Disconnecting ${name}...`);
+        log.debug('Disconnecting', { server: name });
         const transport = this.transports.get(name);
         if (transport) {
             try {
@@ -109,7 +112,7 @@ export class McpConnectionManager {
                 // But types definition might vary. Let's try casting to any if needed or just trusting it.
                 (transport as any).close?.();
             } catch (e) {
-                console.error(`[MCP] Error disconnecting ${name}:`, e);
+                log.error('Disconnect error', { server: name, error: e });
             }
         }
         this.clients.delete(name);
@@ -131,7 +134,7 @@ export class McpConnectionManager {
                 client = this.clients.get(server.name);
                 if (!client) return false;
             } catch (e) {
-                console.error(`Failed to connect during test for ${server.name}:`, e);
+                log.error('Test connection failed', { server: server.name, error: e });
                 throw e;
             }
         }
@@ -140,7 +143,7 @@ export class McpConnectionManager {
             await client.listTools();
             return true;
         } catch (e) {
-            console.error(`Ping failed for ${server.name}:`, e);
+            log.error('Ping failed', { server: server.name, error: e });
             return false;
         }
     }

@@ -10,12 +10,10 @@ import { GeminiController } from './controllers/GeminiController';
 import { AuthController } from './controllers/AuthController';
 import { McpController } from './controllers/McpController';
 import { IPC_CHANNELS } from './ipc-events';
+import { logger } from './lib/logger';
 import type { Conversation } from '../shared/types';
 
-// Logging utility
-const log = (scope: string, message: string) => {
-    console.log(`[${scope}] ${message}`);
-};
+const log = logger.main;
 
 let mainWindow: BrowserWindow | null = null;
 const router = new IpcRouter();
@@ -65,14 +63,14 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-    log('Electron', 'Application starting...');
+    log.info('Application starting...');
 
     // Initialize Gemini client (OAuth-based, no API key needed)
     try {
         await gemini.initialize();
-        log('Gemini', 'Client initialized (OAuth mode)');
+        log.info('Gemini client initialized (OAuth mode)');
     } catch (err: any) {
-        log('Gemini', `Initialization skipped - will prompt for sign-in: ${err.message}`);
+        log.warn('Gemini initialization skipped - will prompt for sign-in', { error: err.message });
     }
 
     // Set App User Model ID for Windows/Linux icon association
@@ -123,11 +121,11 @@ app.whenReady().then(async () => {
     });
 
     // Connect to MCP servers on startup
-    console.log('[Main] Connecting to MCP servers...');
+    log.info('Connecting to MCP servers...');
     mcpService.init().then(() => {
-        console.log('[Main] MCP servers connected.');
+        log.info('MCP servers connected');
     }).catch(err => {
-        console.error('[Main] Failed to connect to MCP servers:', err);
+        log.error('Failed to connect to MCP servers', { error: err.message });
     });
 
     app.on('activate', function () {
@@ -136,7 +134,8 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', function () {
-    log('Electron', 'All windows closed');
+    log.info('All windows closed, shutting down');
     gemini.shutdown();
     if (process.platform !== 'darwin') app.quit();
 });
+
