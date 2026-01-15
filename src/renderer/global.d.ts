@@ -51,7 +51,7 @@ export interface IElectronAPI {
     pollForToken: (
         deviceCode: string,
         interval: number,
-    ) => Promise<{ access_token: string; token_type: string } | null>;
+    ) => Promise<{ accessToken: string; tokenType: string; scope: string } | null>;
 
     // Copilot
     copilotInit: (token: string) => Promise<ConnectionStatus>;

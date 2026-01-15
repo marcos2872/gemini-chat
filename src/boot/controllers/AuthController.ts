@@ -35,11 +35,18 @@ export class AuthController {
             return globalStore;
         };
 
-        this.router.registerHandler(IPC_CHANNELS.AUTH.SAVE_TOKEN, async (event, token: string) => {
-            const store = await getStore();
-            store.set('github_token', token);
-            return true;
-        });
+        this.router.registerHandler(
+            IPC_CHANNELS.AUTH.SAVE_TOKEN,
+            async (_event, token: string | null) => {
+                const store = await getStore();
+                if (token) {
+                    store.set('github_token', token);
+                } else {
+                    store.delete('github_token');
+                }
+                return true;
+            },
+        );
 
         this.router.registerHandler(IPC_CHANNELS.AUTH.GET_TOKEN, async () => {
             const store = await getStore();
@@ -60,9 +67,14 @@ export class AuthController {
 
         // Copilot Client
         this.router.registerHandler(IPC_CHANNELS.COPILOT.INIT, async (_event, token: string) => {
-            this.copilotClient.initialize(token);
-            const isConnected = await this.copilotClient.validateConnection();
-            return { success: true, connected: isConnected };
+            try {
+                await this.copilotClient.initialize(token);
+                const isConnected = await this.copilotClient.validateConnection();
+                return { success: true, connected: isConnected };
+            } catch (err: any) {
+                log.error('Copilot initialization failed', { error: err.message });
+                return { success: false, error: err.message };
+            }
         });
 
         this.router.registerHandler(IPC_CHANNELS.COPILOT.CHECK_CONNECTION, async () => {

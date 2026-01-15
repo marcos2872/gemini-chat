@@ -72,14 +72,14 @@ export function useCopilotAuth(): UseCopilotAuthReturn {
                 return null;
             }
 
-            if (tokenResult) {
+            if (tokenResult && tokenResult.accessToken) {
                 // Save token and initialize copilot
-                await window.electronAPI.saveAuthToken(tokenResult.access_token);
-                await window.electronAPI.copilotInit(tokenResult.access_token);
+                await window.electronAPI.saveAuthToken(tokenResult.accessToken);
+                await window.electronAPI.copilotInit(tokenResult.accessToken);
                 setIsAuthenticated(true);
                 return {
-                    accessToken: tokenResult.access_token,
-                    tokenType: tokenResult.token_type,
+                    accessToken: tokenResult.accessToken,
+                    tokenType: tokenResult.tokenType,
                 };
             }
 

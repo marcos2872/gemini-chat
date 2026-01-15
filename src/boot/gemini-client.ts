@@ -68,6 +68,7 @@ export class GeminiClient {
     }
 
     async setModel(model: string) {
+        if (this.modelName === model) return;
         this.modelName = model;
         log.info('Model changed', { model });
     }
@@ -413,21 +414,21 @@ export class GeminiClient {
 
         return [
             {
+                name: DEFAULT_GEMINI_FLASH_MODEL,
+                displayName: DEFAULT_GEMINI_FLASH_MODEL,
+            },
+            { name: DEFAULT_GEMINI_MODEL, displayName: DEFAULT_GEMINI_MODEL },
+            {
+                name: DEFAULT_GEMINI_FLASH_LITE_MODEL,
+                displayName: DEFAULT_GEMINI_FLASH_LITE_MODEL,
+            },
+            {
                 name: PREVIEW_GEMINI_MODEL,
                 displayName: PREVIEW_GEMINI_MODEL,
             },
             {
                 name: PREVIEW_GEMINI_FLASH_MODEL,
                 displayName: PREVIEW_GEMINI_FLASH_MODEL,
-            },
-            { name: DEFAULT_GEMINI_MODEL, displayName: DEFAULT_GEMINI_MODEL },
-            {
-                name: DEFAULT_GEMINI_FLASH_MODEL,
-                displayName: DEFAULT_GEMINI_FLASH_MODEL,
-            },
-            {
-                name: DEFAULT_GEMINI_FLASH_LITE_MODEL,
-                displayName: DEFAULT_GEMINI_FLASH_LITE_MODEL,
             },
         ];
     }
