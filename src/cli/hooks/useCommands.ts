@@ -1,6 +1,6 @@
 import clipboard from 'clipboardy';
 import open from 'open';
-import { storage, gemini, copilot, copilotAuth } from '../services';
+import { storage, gemini, copilot, copilotAuth, ollama } from '../services';
 import { Provider } from './useChat';
 
 export interface CommandContext {
@@ -22,10 +22,11 @@ export const useCommands = (ctx: CommandContext) => {
                 ctx.addSystemMessage(`
 Available Commands:
   /auth               - Authenticate current provider
-  /provider [name]    - Switch provider (gemini, copilot)
+  /provider [name]    - Switch provider (gemini, copilot, ollama)
   /model [name]       - Set model for current provider
   /models             - List available models
   /clear              - Clear conversation history
+  /logs               - Open log file location
   /logout             - Logout from current provider
   /exit               - Exit application
 				`);
@@ -71,17 +72,48 @@ Available Commands:
                 break;
 
             case 'provider':
-                if (args[0] === 'gemini' || args[0] === 'copilot') {
-                    ctx.setProvider(args[0]);
-                    const defModel = args[0] === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o';
+                if (args[0] === 'gemini' || args[0] === 'copilot' || args[0] === 'ollama') {
+                    ctx.setProvider(args[0] as Provider);
+
+                    let defModel = 'gemini-2.5-flash';
+                    if (args[0] === 'copilot') defModel = 'gpt-4o';
+                    if (args[0] === 'ollama') {
+                        defModel = 'no models'; // Default fallback
+                        try {
+                            const models = await ollama.listModels();
+                            if (models.length > 0) {
+                                defModel = models[0].name;
+                            }
+                        } catch {
+                            // ignore
+                        }
+                    } else if (args[0] === 'gemini') {
+                        defModel = 'gemini-2.5-flash'; // Default fallback
+                        try {
+                            // Only try to list if we might be authorized, or let it fail silently
+                            if (gemini.isConfigured()) {
+                                const models = await gemini.listModels();
+                                if (models.length > 0) {
+                                    defModel = models[0].name;
+                                }
+                            }
+                        } catch {
+                            // ignore
+                        }
+                    }
+
                     ctx.setModel(defModel);
+
                     if (args[0] === 'gemini') gemini.setModel(defModel);
-                    else copilot.setModel(defModel);
+                    else if (args[0] === 'copilot') copilot.setModel(defModel);
+                    else if (args[0] === 'ollama') ollama.setModel(defModel);
 
                     ctx.addSystemMessage(`Switched to **${args[0]}** (Model: ${defModel})`);
                     ctx.forceUpdate();
                 } else {
-                    ctx.addSystemMessage('Invalid provider. Use: /provider [gemini|copilot]');
+                    ctx.addSystemMessage(
+                        'Invalid provider. Use: /provider [gemini|copilot|ollama]',
+                    );
                 }
                 break;
 
@@ -89,7 +121,8 @@ Available Commands:
                 if (args[0]) {
                     ctx.setModel(args[0]);
                     if (ctx.provider === 'gemini') gemini.setModel(args[0]);
-                    else copilot.setModel(args[0]);
+                    else if (ctx.provider === 'copilot') copilot.setModel(args[0]);
+                    else if (ctx.provider === 'ollama') ollama.setModel(args[0]);
                     ctx.addSystemMessage(`Model set to **${args[0]}**`);
                     // Update conversation model metadata
                     if (ctx.conversation) {
@@ -104,8 +137,11 @@ Available Commands:
             case 'models':
                 ctx.setStatus('Fetching models...');
                 try {
-                    const client = ctx.provider === 'gemini' ? gemini : copilot;
-                    if (!client.isConfigured()) {
+                    let client: any = gemini;
+                    if (ctx.provider === 'copilot') client = copilot;
+                    if (ctx.provider === 'ollama') client = ollama;
+
+                    if (ctx.provider !== 'ollama' && !client.isConfigured()) {
                         ctx.addSystemMessage('Please authenticate first using /auth');
                         ctx.setStatus('Auth Required');
                         break;
@@ -138,12 +174,27 @@ Available Commands:
                     } catch (e: any) {
                         ctx.addSystemMessage(`Logout failed: ${e.message}`);
                     }
-                } else {
+                } else if (ctx.provider === 'copilot') {
                     copilot.reset();
                     ctx.addSystemMessage('Logged out from Copilot.');
+                } else if (ctx.provider === 'ollama') {
+                    ollama.reset();
+                    ctx.addSystemMessage('Ollama session reset.');
                 }
                 ctx.setStatus('Not Authenticated');
                 ctx.forceUpdate();
+                break;
+            }
+
+            case 'logs': {
+                const home = process.env.HOME || process.env.USERPROFILE;
+                const logPath = `${home}/.gemini-desktop/logs/cli.log`;
+                ctx.addSystemMessage(`Opening logs at: ${logPath}`);
+                try {
+                    await open(`${home}/.gemini-desktop/logs`);
+                } catch (e: any) {
+                    ctx.addSystemMessage(`Failed to open logs: ${e.message}`);
+                }
                 break;
             }
 

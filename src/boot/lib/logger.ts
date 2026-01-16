@@ -19,7 +19,7 @@ try {
     console.error('Failed to create log directory', e);
 }
 
-function formatMsg(level: string, scope: string, text: any) {
+function formatMsg(level: string, scope: string, text: any, meta?: any) {
     const now = new Date();
     const ts = now.toISOString();
     let msg = text;
@@ -30,11 +30,18 @@ function formatMsg(level: string, scope: string, text: any) {
             msg = String(text);
         }
     }
+    if (meta !== undefined) {
+        try {
+            msg += ' ' + JSON.stringify(meta);
+        } catch {
+            msg += ' [Meta Error]';
+        }
+    }
     return `[${ts}] [${level}] ${scope}: ${msg}\n`;
 }
 
-function writeLog(level: string, scope: string, text: any) {
-    const entry = formatMsg(level, scope, text);
+function writeLog(level: string, scope: string, text: any, meta?: any) {
+    const entry = formatMsg(level, scope, text, meta);
     try {
         fs.appendFileSync(logFile, entry);
     } catch (e) {
@@ -49,19 +56,18 @@ class ScopeLogger {
         this.scope = scope;
     }
 
-    info(text: any) {
-        writeLog('INFO', this.scope, text);
+    info(text: any, meta?: any) {
+        writeLog('INFO', this.scope, text, meta);
     }
 
-    warn(text: any) {
-        writeLog('WARN', this.scope, text);
+    warn(text: any, meta?: any) {
+        writeLog('WARN', this.scope, text, meta);
     }
 
-    error(text: any) {
-        writeLog('ERROR', this.scope, text);
+    error(text: any, meta?: any) {
+        writeLog('ERROR', this.scope, text, meta);
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     debug(_text: any) {
         // Uncomment to enable debug logs
         // writeLog('DEBUG', this.scope, text);
@@ -80,9 +86,9 @@ export const logger = {
     main: createLogger('Main'),
     gemini: createLogger('Gemini'),
     copilot: createLogger('Copilot'),
+    ollama: createLogger('Ollama'),
     mcp: createLogger('MCP'),
     auth: createLogger('Auth'),
-    ipc: createLogger('IPC'),
     storage: createLogger('Storage'),
 };
 

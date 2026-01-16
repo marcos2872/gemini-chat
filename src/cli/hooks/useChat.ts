@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { storage, mcpService, gemini, copilot } from '../services';
+import { storage, mcpService, gemini, copilot, ollama } from '../services';
 
-export type Provider = 'gemini' | 'copilot';
+export type Provider = 'gemini' | 'copilot' | 'ollama';
 
 export const useChat = () => {
     // State
@@ -23,10 +23,14 @@ export const useChat = () => {
                 (newConv as any).model = model;
                 setConversation(newConv);
 
+                // Initial status check
                 if (provider === 'gemini' && !gemini.isConfigured()) {
                     setStatus('Not Authenticated');
                 } else if (provider === 'copilot' && !copilot.isConfigured()) {
                     setStatus('Not Authenticated');
+                } else if (provider === 'ollama') {
+                    const connected = await ollama.validateConnection();
+                    setStatus(connected ? 'Ready' : 'Ollama Not Detected');
                 } else {
                     setStatus('Ready');
                 }
@@ -36,6 +40,22 @@ export const useChat = () => {
         };
         init();
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Provider change effect
+    useEffect(() => {
+        const checkProvider = async () => {
+            if (provider === 'gemini') {
+                setStatus(gemini.isConfigured() ? 'Ready' : 'Not Authenticated');
+            } else if (provider === 'copilot') {
+                setStatus(copilot.isConfigured() ? 'Ready' : 'Not Authenticated');
+            } else if (provider === 'ollama') {
+                setStatus('Checking Ollama...');
+                const connected = await ollama.validateConnection();
+                setStatus(connected ? 'Ready' : 'Ollama Not Detected');
+            }
+        };
+        checkProvider();
+    }, [provider]);
 
     // Helpers
     const addSystemMessage = (text: string) => {
@@ -72,6 +92,8 @@ export const useChat = () => {
 
             if (provider === 'gemini') {
                 responseText = await gemini.sendPrompt(text, mcpService);
+            } else if (provider === 'ollama') {
+                responseText = await ollama.sendPrompt(text, mcpService);
             } else {
                 if (!copilot.isConfigured()) {
                     throw new Error('Copilot not authenticated. Run /auth');
