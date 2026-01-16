@@ -1,36 +1,81 @@
 /**
  * Centralized Logger Module
- * Uses electron-log for structured logging with file rotation
+ * Simple file logger for CLI environment
  */
-import log from 'electron-log';
+import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
 // Configure log file location
 const logPath = path.join(os.homedir(), '.gemini-desktop', 'logs');
-log.transports.file.resolvePathFn = () => path.join(logPath, 'main.log');
+const logFile = path.join(logPath, 'cli.log');
 
-// Configure log format
-log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {scope}: {text}';
-log.transports.console.format = '[{h}:{i}:{s}] [{level}] {scope}: {text}';
-
-// Configure log levels
-log.transports.file.level = 'info';
-log.transports.console.level = process.env.IS_DEV ? 'debug' : 'info';
-
-// Configure file rotation (max 5 files, 5MB each)
-log.transports.file.maxSize = 5 * 1024 * 1024; // 5MB
-
-/**
- * Create a scoped logger for a specific module
- */
-export function createLogger(scope: string) {
-    return log.scope(scope);
+// Ensure log directory exists
+try {
+    if (!fs.existsSync(logPath)) {
+        fs.mkdirSync(logPath, { recursive: true });
+    }
+} catch (e) {
+    console.error('Failed to create log directory', e);
 }
 
-/**
- * Pre-configured loggers for each module
- */
+function formatMsg(level: string, scope: string, text: any) {
+    const now = new Date();
+    const ts = now.toISOString();
+    let msg = text;
+    if (typeof text !== 'string') {
+        try {
+            msg = JSON.stringify(text);
+        } catch {
+            msg = String(text);
+        }
+    }
+    return `[${ts}] [${level}] ${scope}: ${msg}\n`;
+}
+
+function writeLog(level: string, scope: string, text: any) {
+    const entry = formatMsg(level, scope, text);
+    try {
+        fs.appendFileSync(logFile, entry);
+    } catch (e) {
+        console.error('Failed to write to log', e);
+    }
+}
+
+class ScopeLogger {
+    private scope: string;
+
+    constructor(scope: string) {
+        this.scope = scope;
+    }
+
+    info(text: any) {
+        writeLog('INFO', this.scope, text);
+    }
+
+    warn(text: any) {
+        writeLog('WARN', this.scope, text);
+    }
+
+    error(text: any) {
+        writeLog('ERROR', this.scope, text);
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    debug(_text: any) {
+        // Uncomment to enable debug logs
+        // writeLog('DEBUG', this.scope, text);
+    }
+
+    log(text: any) {
+        writeLog('INFO', this.scope, text);
+    }
+}
+
+export function createLogger(scope: string) {
+    return new ScopeLogger(scope);
+}
+
 export const logger = {
     main: createLogger('Main'),
     gemini: createLogger('Gemini'),
@@ -41,5 +86,10 @@ export const logger = {
     storage: createLogger('Storage'),
 };
 
-// Export the base log for direct use if needed
-export default log;
+export default {
+    scope: createLogger,
+    info: (text: any) => writeLog('INFO', 'Global', text),
+    error: (text: any) => writeLog('ERROR', 'Global', text),
+    warn: (text: any) => writeLog('WARN', 'Global', text),
+    debug: (text: any) => writeLog('DEBUG', 'Global', text),
+};

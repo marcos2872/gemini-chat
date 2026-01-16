@@ -4,7 +4,8 @@ import url from 'url';
 import open from 'open';
 import fs from 'fs';
 import path from 'path';
-import { app } from 'electron';
+import * as os from 'os';
+// import { app } from 'electron'; // Removed to support CLI
 import { logger } from '../lib/logger';
 
 const log = logger.auth;
@@ -37,9 +38,14 @@ export class GoogleAuthService {
             'http://localhost:3003/oauth2callback',
         );
 
-        // Define onde salvar os tokens. No Electron, use app.getPath('userData')
-        // Se estiver rodando fora do electron (testes), fallback para diretório local
-        const userDataPath = app ? app.getPath('userData') : '.';
+        // Determine storage path based on environment
+        const userDataPath = path.join(os.homedir(), '.gemini-desktop');
+
+        // Ensure directory exists
+        if (!fs.existsSync(userDataPath)) {
+            fs.mkdirSync(userDataPath, { recursive: true });
+        }
+
         this.tokenPath = path.join(userDataPath, 'google-tokens.json');
     }
 
