@@ -2,40 +2,16 @@ import { GoogleAuthService } from './auth/GoogleAuthService';
 import { v4 as uuidv4 } from 'uuid';
 import { OAuth2Client } from 'google-auth-library';
 import { logger } from './lib/logger';
+import { GeminiHandshakeService } from './services/gemini/GeminiHandshakeService';
+import { GeminiToolService } from './services/gemini/GeminiToolService';
+import { GeminiStreamService } from './services/gemini/GeminiStreamService';
+import { Content, Part } from './services/gemini/types';
+import { GeminiListModelsService } from './services/gemini/GeminiListModelsService';
 
 const log = logger.gemini;
 
 // Internal API Constants
 const ENDPOINT = 'https://cloudcode-pa.googleapis.com/v1internal';
-
-interface LoadResponse {
-    currentTier?: { id: string };
-    cloudaicompanionProject?: string;
-}
-
-interface OnboardResponse {
-    done: boolean;
-    name?: string;
-    response?: { cloudaicompanionProject?: { id: string } };
-}
-
-// Helper Interfaces for Gemini Content
-interface Part {
-    text?: string;
-    functionCall?: {
-        name: string;
-        args: any;
-    };
-    functionResponse?: {
-        name: string;
-        response: any;
-    };
-}
-
-interface Content {
-    role: string;
-    parts: Part[];
-}
 
 export class GeminiClient {
     private configPath: string | undefined;
@@ -45,11 +21,23 @@ export class GeminiClient {
     private client: OAuth2Client | null = null;
     private projectId: string | undefined;
 
+    // Services
+    private handshakeService: GeminiHandshakeService;
+    private toolService: GeminiToolService;
+    private streamService: GeminiStreamService;
+    private listModelsService: GeminiListModelsService;
+
     constructor(configPath?: string) {
         this.configPath = configPath;
         this.modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
         this.history = [];
         this.authService = new GoogleAuthService();
+
+        // Initialize Services
+        this.handshakeService = new GeminiHandshakeService();
+        this.toolService = new GeminiToolService();
+        this.streamService = new GeminiStreamService();
+        this.listModelsService = new GeminiListModelsService();
     }
 
     async initialize() {
@@ -86,65 +74,6 @@ export class GeminiClient {
         }
     }
 
-    private async performHandshake(): Promise<string> {
-        if (!this.client) throw new Error('Not authenticated');
-        if (this.projectId) return this.projectId;
-
-        log.debug('Performing handshake...');
-        const userProjectId = undefined;
-        const loadReq = {
-            cloudaicompanionProject: userProjectId,
-            metadata: { ideType: 'IDE_UNSPECIFIED', pluginType: 'GEMINI' },
-        };
-
-        const loadRes = await this.postRequest<LoadResponse>('loadCodeAssist', loadReq);
-
-        if (loadRes.cloudaicompanionProject) {
-            this.projectId = loadRes.cloudaicompanionProject;
-            return this.projectId;
-        }
-
-        const tierId = loadRes.currentTier?.id || 'FREE';
-        const onboardReq = {
-            tierId: tierId,
-            cloudaicompanionProject: tierId === 'FREE' ? undefined : userProjectId,
-            metadata: { ideType: 'IDE_UNSPECIFIED', pluginType: 'GEMINI' },
-        };
-
-        let lro = await this.postRequest<OnboardResponse>('onboardUser', onboardReq);
-
-        while (!lro.done && lro.name) {
-            log.debug('Waiting for onboarding...');
-            await new Promise((r) => setTimeout(r, 2000));
-            const opRes = await this.client.request({
-                url: `${ENDPOINT}/${lro.name}`,
-                method: 'GET',
-            });
-            lro = opRes.data as OnboardResponse;
-        }
-
-        const finalProjectId = lro.response?.cloudaicompanionProject?.id;
-        if (!finalProjectId && tierId !== 'FREE' && userProjectId) {
-            this.projectId = userProjectId;
-            return userProjectId!;
-        }
-        if (!finalProjectId) throw new Error('Failed to obtain Project ID.');
-
-        this.projectId = finalProjectId;
-        return finalProjectId;
-    }
-
-    private async postRequest<T>(method: string, body: any): Promise<T> {
-        if (!this.client) throw new Error('Client not ready');
-        const res = await this.client.request({
-            url: `${ENDPOINT}:${method}`,
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-        });
-        return res.data as T;
-    }
-
     /**
      * Main Prompt Function with Tool Loop
      */
@@ -153,7 +82,7 @@ export class GeminiClient {
         if (!this.client) throw new Error('Gemini Client not authenticated');
 
         // 1. Setup
-        const projectId = await this.performHandshake();
+        this.projectId = await this.handshakeService.performHandshake(this.client, this.projectId);
         const promptId = uuidv4();
 
         // Add user message to history
@@ -164,7 +93,7 @@ export class GeminiClient {
         if (mcpManager) {
             const tools = await mcpManager.getAllTools();
             if (tools && tools.length > 0) {
-                geminiTools = this._mapToolsToGemini(tools);
+                geminiTools = this.toolService.mapToolsToGemini(tools);
             }
         }
 
@@ -185,14 +114,14 @@ export class GeminiClient {
                     tools: geminiTools,
                 },
                 promptId,
-                projectId,
+                this.projectId,
             );
 
             log.debug('Sending request', { turn });
             const stream = await this.sendInternalChat(this.client, payload);
 
             // Parse Full Response
-            const responseContent = await this.consumeStream(stream);
+            const responseContent = await this.streamService.consumeStream(stream);
 
             // Add Model Response to History
             this.history.push(responseContent);
@@ -260,65 +189,6 @@ export class GeminiClient {
         return finalAnswer;
     }
 
-    private async consumeStream(stream: any): Promise<Content> {
-        let accumulatedText = '';
-        const functionCalls: any[] = [];
-        const role = 'model'; // Default response role
-
-        // Helper to process a JSON chunk
-        const processJson = (json: any) => {
-            const candidate = json.response?.candidates?.[0];
-            if (!candidate || !candidate.content) return;
-
-            const parts = candidate.content.parts || [];
-            for (const part of parts) {
-                if (part.text) accumulatedText += part.text;
-                if (part.functionCall) functionCalls.push(part.functionCall);
-            }
-        };
-
-        if (stream.on) {
-            await new Promise<void>((resolve, reject) => {
-                stream.on('data', (d: any) => {
-                    this.parseChunkLines(d).forEach(processJson);
-                });
-                stream.on('end', resolve);
-                stream.on('error', reject);
-            });
-        } else if (stream[Symbol.asyncIterator]) {
-            for await (const chunk of stream) {
-                this.parseChunkLines(chunk).forEach(processJson);
-            }
-        }
-
-        // Reconstruct final Content object
-        const parts: Part[] = [];
-        if (accumulatedText) parts.push({ text: accumulatedText });
-        functionCalls.forEach((fc) => parts.push({ functionCall: fc }));
-
-        return { role, parts };
-    }
-
-    private parseChunkLines(chunk: any): any[] {
-        const str = chunk.toString();
-        const results = [];
-        const lines = str.split('\n');
-        for (const line of lines) {
-            if (line.startsWith('data: ')) {
-                const jsonStr = line.slice(6).trim();
-                if (jsonStr === '[DONE]') continue;
-                try {
-                    const parsed = JSON.parse(jsonStr);
-                    // log.debug('[Gemini] Parsed JSON:', JSON.stringify(parsed));
-                    results.push(parsed);
-                } catch {
-                    log.warn('[Gemini] Failed to parse JSON chunk:', jsonStr);
-                }
-            }
-        }
-        return results;
-    }
-
     private buildInternalRequestPayload(req: any, userPromptId: string, projectId?: string) {
         return {
             model: req.model,
@@ -346,37 +216,6 @@ export class GeminiClient {
             responseType: 'stream',
         });
         return res.data as any;
-    }
-
-    _mapToolsToGemini(mcpTools: any[]) {
-        // Map to { function_declarations: [...] }
-        const tools = mcpTools.map((tool) => ({
-            name: this._sanitizeName(tool.name),
-            description: tool.description || `Tool ${tool.name}`,
-            parameters: this._sanitizeSchema(tool.inputSchema),
-        }));
-        // User snippet uses: tools: [ { function_declarations: [...] } ]
-        return [
-            {
-                functionDeclarations: tools,
-            },
-        ];
-    }
-
-    _sanitizeName(name: string) {
-        return name.replace(/[^a-zA-Z0-9_-]/g, '_');
-    }
-
-    _sanitizeSchema(schema: any): any {
-        if (!schema || typeof schema !== 'object') return schema;
-        const clean = { ...schema };
-        if (!clean.type && clean.properties) clean.type = 'OBJECT';
-        if (clean.type && typeof clean.type === 'string') clean.type = clean.type.toUpperCase();
-        delete clean.$schema;
-        delete clean.title;
-        // Gemini doesn't like some standard json schema keywords?
-        // Usually fine, keeping existing sanitization
-        return clean;
     }
 
     _addToHistory(role: string, content: string) {
@@ -413,30 +252,6 @@ export class GeminiClient {
     }
 
     async listModels(): Promise<Array<{ name: string; displayName: string }>> {
-        const PREVIEW_GEMINI_MODEL = 'gemini-3-pro-preview';
-        const PREVIEW_GEMINI_FLASH_MODEL = 'gemini-3-flash-preview';
-        const DEFAULT_GEMINI_MODEL = 'gemini-2.5-pro';
-        const DEFAULT_GEMINI_FLASH_MODEL = 'gemini-2.5-flash';
-        const DEFAULT_GEMINI_FLASH_LITE_MODEL = 'gemini-2.5-flash-lite';
-
-        return [
-            {
-                name: DEFAULT_GEMINI_FLASH_MODEL,
-                displayName: DEFAULT_GEMINI_FLASH_MODEL,
-            },
-            { name: DEFAULT_GEMINI_MODEL, displayName: DEFAULT_GEMINI_MODEL },
-            {
-                name: DEFAULT_GEMINI_FLASH_LITE_MODEL,
-                displayName: DEFAULT_GEMINI_FLASH_LITE_MODEL,
-            },
-            {
-                name: PREVIEW_GEMINI_MODEL,
-                displayName: PREVIEW_GEMINI_MODEL,
-            },
-            {
-                name: PREVIEW_GEMINI_FLASH_MODEL,
-                displayName: PREVIEW_GEMINI_FLASH_MODEL,
-            },
-        ];
+        return this.listModelsService.listModels();
     }
 }
