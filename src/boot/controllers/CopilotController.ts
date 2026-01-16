@@ -11,7 +11,7 @@ import { logger } from '../lib/logger';
 
 const log = logger.copilot;
 
-export class AuthController {
+export class CopilotController {
     constructor(
         private router: IpcRouter,
         private copilotClient: CopilotClient,
@@ -120,6 +120,17 @@ export class AuthController {
 
             log.debug('Forwarding prompt to Copilot', { prompt: lastMsg.content.substring(0, 50) });
 
+            // Add User Message immediately so tool logs appear after it
+            const userMsg = {
+                id: crypto.randomUUID(),
+                role: 'user',
+                content: lastMsg.content,
+                timestamp: new Date().toISOString(),
+            };
+            activeConversation.messages.push(userMsg);
+            // Optional: Save here or rely on tool callback/final save
+            // this.storage.saveConversation(activeConversation).catch(console.error);
+
             await this.mcpManager.connectAll();
 
             const response: string = await this.copilotClient.sendPrompt(
@@ -141,6 +152,26 @@ export class AuthController {
                         ipcMain.once(
                             IPC_CHANNELS.GEMINI.APPROVAL_RESPONSE,
                             (event: any, { approved }: { approved: boolean }) => {
+                                // Log approval
+                                const statusMsg = {
+                                    id: crypto.randomUUID(),
+                                    role: 'system',
+                                    content: approved
+                                        ? `✅ Allowed: ${toolName}\nArgs: ${JSON.stringify(args, null, 2)}`
+                                        : `❌ Denied: ${toolName}`,
+                                    timestamp: new Date().toISOString(),
+                                };
+                                activeConversation.messages.push(statusMsg);
+                                this.storage
+                                    .saveConversation(activeConversation)
+                                    .catch(console.error);
+
+                                if (win) {
+                                    win.webContents.send(
+                                        IPC_CHANNELS.CONVERSATION.UPDATE,
+                                        activeConversation,
+                                    );
+                                }
                                 resolve(approved);
                             },
                         );
@@ -152,13 +183,7 @@ export class AuthController {
                 win.webContents.send(IPC_CHANNELS.COPILOT.CHUNK, response);
             }
 
-            const userMsg = {
-                id: crypto.randomUUID(),
-                role: 'user',
-                content: lastMsg.content,
-                timestamp: new Date().toISOString(),
-            };
-            activeConversation.messages.push(userMsg);
+            // User message already added
 
             const assistantMsg = {
                 id: crypto.randomUUID(),

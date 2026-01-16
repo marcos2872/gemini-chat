@@ -7,7 +7,7 @@ import { CopilotAuthService } from './copilot-auth-service';
 import { CopilotClient } from './copilot-client';
 import { IpcRouter } from './lib/IpcRouter';
 import { GeminiController } from './controllers/GeminiController';
-import { AuthController } from './controllers/AuthController';
+import { CopilotController } from './controllers/CopilotController';
 import { McpController } from './controllers/McpController';
 import { IPC_CHANNELS } from './ipc-events';
 import { logger } from './lib/logger';
@@ -90,7 +90,7 @@ app.whenReady().then(async () => {
         getActiveConversation,
         setActiveConversation,
     );
-    new AuthController(
+    new CopilotController(
         router,
         copilotClient,
         copilotAuth,

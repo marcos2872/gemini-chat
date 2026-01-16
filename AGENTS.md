@@ -18,11 +18,11 @@ Sua missão não é apenas escrever código, mas elevar o padrão de qualquer pr
 
 Antes de aplicar regras complexas, entenda onde você está pisando.
 
-| Cenário Detectado | Estratégia de Arquitetura | Nível de Rigor |
-| :--- | :--- | :--- |
-| **Script / POC / Utility** | Arquitetura Flat (Simples). Foco em resolver o problema. | Nível 1 (Limpeza + Logs básicos) |
-| **API / Backend / App** | Arquitetura em Camadas, Hexagonal ou a Padrão do Projeto. | Nível 2 (Strict Types + DTOs + Segurança) |
-| **Legado / Crítico** | Mimetismo Absoluto. Não inove, melhore a segurança e refatore internamente. | Nível 3 (Observabilidade + Testes + Docs Pesada) |
+| Cenário Detectado          | Estratégia de Arquitetura                                                   | Nível de Rigor                                   |
+| :------------------------- | :-------------------------------------------------------------------------- | :----------------------------------------------- |
+| **Script / POC / Utility** | Arquitetura Flat (Simples). Foco em resolver o problema.                    | Nível 1 (Limpeza + Logs básicos)                 |
+| **API / Backend / App**    | Arquitetura em Camadas, Hexagonal ou a Padrão do Projeto.                   | Nível 2 (Strict Types + DTOs + Segurança)        |
+| **Legado / Crítico**       | Mimetismo Absoluto. Não inove, melhore a segurança e refatore internamente. | Nível 3 (Observabilidade + Testes + Docs Pesada) |
 
 ## 🛡️ DIRETRIZES PRIMÁRIAS (AS TRÊS LEIS)
 
@@ -63,15 +63,18 @@ Todo conteúdo voltado ao usuário ou desenvolvedor **DEVE** estar em português
 ## ⚙️ WORKFLOW OPERACIONAL (CICLO DE VIDA)
 
 **1. ANÁLISE E DIAGNÓSTICO (Audit Mode):**
+
 - Leia o código. Identifique Code Smells e Falhas de Segurança.
 - **Diagnóstico**: Relate brevemente o estado atual.
 
 **2. EXECUÇÃO & AUTOCORREÇÃO (Builder Mode - "Mão na Massa"):**
+
 - **Bias for Action**: Não peça permissão para corrigir erros óbvios.
 - **Implementação**: Escreva o código seguindo a Stack do projeto.
 - **Protocolo Self-Healing**: Se a build falhar, corrija até 3 vezes antes de pedir ajuda.
 
 **3. DOCUMENTAÇÃO (Scribe Mode):**
+
 - **Regra de Ouro**: Alterou código? Atualizou a documentação.
 
 ## 🏗️ GUIA TECNOLÓGICO (ESPECIFICIDADES)
@@ -96,18 +99,18 @@ Todo conteúdo voltado ao usuário ou desenvolvedor **DEVE** estar em português
 
 ### Comandos Principais
 
-| Comando            | Descrição                        |
-| :----------------- | :------------------------------- |
-| `npm run dev`      | Rodar localmente (Vite + Electron) |
-| `npm run build:main`| Compilar o Main Process (TS -> JS) |
-| `npm run build`    | Compilar App completa            |
+| Comando              | Descrição                          |
+| :------------------- | :--------------------------------- |
+| `npm run dev`        | Rodar localmente (Vite + Electron) |
+| `npm run build:main` | Compilar o Main Process (TS -> JS) |
+| `npm run build`      | Compilar App completa              |
 
 ### Estrutura de Módulos (`src/boot`)
 
 - **Entry Point**: `main.ts` (Inicialização leve, injeta dependências).
 - **Controllers**:
     - `controllers/GeminiController.ts`: Lógica de IPC do Gemini.
-    - `controllers/AuthController.ts`: Lógica de Auth/Copilot.
+    - `controllers/CopilotController.ts`: Lógica de Auth/Copilot.
     - `controllers/McpController.ts`: Lógica do MCP.
 - **Lib**: `lib/IpcRouter.ts` (Roteador central de IPC).
 - **Core Services**:
@@ -133,13 +136,13 @@ Todo conteúdo voltado ao usuário ou desenvolvedor **DEVE** estar em português
 
 ## ❌ ANTI-PATTERNS A EVITAR
 
-| ❌ Não Faça                                       | ✅ Faça Isso                                |
-| :------------------------------------------------ | :------------------------------------------ |
-| Usar `remote` module do Electron                  | Use IPC (`ipcMain`/`ipcRenderer`)           |
-| Bloquear a thread principal (Main event loop)     | Use operações async e `Promise.all`         |
-| Hardcoded API Keys                                | Use `electron-store` ou Env Vars            |
-| Lógica de UI no Main Process                      | Mantenha Main focado em serviços/sistema    |
-| Importar `fs` no Renderer                         | Use IPC para operações de arquivo           |
+| ❌ Não Faça                                   | ✅ Faça Isso                             |
+| :-------------------------------------------- | :--------------------------------------- |
+| Usar `remote` module do Electron              | Use IPC (`ipcMain`/`ipcRenderer`)        |
+| Bloquear a thread principal (Main event loop) | Use operações async e `Promise.all`      |
+| Hardcoded API Keys                            | Use `electron-store` ou Env Vars         |
+| Lógica de UI no Main Process                  | Mantenha Main focado em serviços/sistema |
+| Importar `fs` no Renderer                     | Use IPC para operações de arquivo        |
 
 ---
 
@@ -155,6 +158,7 @@ Exemplo: `feat(mcp): adiciona suporte a ferramentas locais`
 ## 🚨 CHECKLIST FINAL (VALIDAÇÃO AUTOMÁTICA)
 
 Antes de entregar a resposta:
+
 - [ ] **Proatividade**: Erros óbvios corrigidos?
 - [ ] **Data Vault**: Chaves de API seguras?
 - [ ] **Docs**: Atualizei (`task.md` / `walkthrough.md`)?

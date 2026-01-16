@@ -233,6 +233,7 @@ export class CopilotClient {
 
         const maxTurns = 10;
         let turn = 0;
+        const deniedTools = new Set<string>();
 
         while (turn < maxTurns) {
             try {
@@ -308,21 +309,53 @@ export class CopilotClient {
                                 });
                             }
 
-                            // Approval
-                            if (typeof onApproval === 'function') {
-                                const approved = await onApproval(functionName, args);
+                            // Execution
+                            let result;
+                            let approved = true;
+                            // Sort keys for stable signature to avoid duplicates on property ordering
+                            const sortKeys = (obj: any): any => {
+                                if (obj === null || typeof obj !== 'object') return obj;
+                                if (Array.isArray(obj)) return obj.map(sortKeys);
+                                return Object.keys(obj)
+                                    .sort()
+                                    .reduce((acc: any, key) => {
+                                        acc[key] = sortKeys(obj[key]);
+                                        return acc;
+                                    }, {});
+                            };
+                            const stableArgs = sortKeys(args);
+                            const toolSignature = `${functionName}:${JSON.stringify(stableArgs)}`;
+
+                            log.debug('Checking tool signature', {
+                                signature: toolSignature,
+                                deniedHasIt: deniedTools.has(toolSignature),
+                                deniedSize: deniedTools.size,
+                            });
+
+                            if (deniedTools.has(toolSignature)) {
+                                log.warn('Auto-denying already rejected tool', {
+                                    tool: functionName,
+                                });
+                                approved = false;
+                            } else if (typeof onApproval === 'function') {
+                                approved = await onApproval(functionName, args);
                                 if (!approved) {
-                                    log.warn('Tool execution rejected', { tool: functionName });
-                                    throw new Error('User denied tool execution.');
+                                    log.debug('Adding signature to denied tools', {
+                                        signature: toolSignature,
+                                    });
+                                    deniedTools.add(toolSignature);
                                 }
                             }
 
-                            // Execution
-                            let result;
-                            try {
-                                result = await mcpManager.callTool(functionName, args);
-                            } catch (err: any) {
-                                result = { error: err.message };
+                            if (!approved) {
+                                log.warn('Tool execution rejected', { tool: functionName });
+                                result = { error: 'User denied tool execution.' };
+                            } else {
+                                try {
+                                    result = await mcpManager.callTool(functionName, args);
+                                } catch (err: any) {
+                                    result = { error: err.message };
+                                }
                             }
 
                             log.debug('Tool result', { tool: functionName, result });
