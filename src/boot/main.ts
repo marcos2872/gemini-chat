@@ -133,10 +133,42 @@ app.whenReady().then(async () => {
     );
     router.registerHandler(IPC_CHANNELS.CONVERSATION.SYNC, async (event, conversation: any) => {
         try {
+            log.info('SYNC request received', {
+                id: conversation.id,
+                msgCount: conversation.messages?.length,
+                model: conversation.model,
+                currentId: activeConversation?.id,
+                currentMsgCount: activeConversation?.messages?.length,
+                currentModel: activeConversation?.model,
+            });
+
+            if (activeConversation && activeConversation.id === conversation.id) {
+                // Protection: Do not overwrite if we have more messages
+                if (activeConversation.messages.length > (conversation.messages?.length || 0)) {
+                    log.warn('SYNC ignored: Incoming conversation has fewer messages', {
+                        incoming: conversation.messages?.length,
+                        current: activeConversation.messages.length,
+                    });
+                    return { success: false, error: 'SYNC_IGNORED_OLDER_STATE' };
+                }
+
+                // Protection: Do not overwite if model name is lost
+                if (activeConversation.model && !conversation.model) {
+                    log.warn(
+                        'SYNC warning: Incoming conversation missing model, preserving current',
+                        {
+                            currentModel: activeConversation.model,
+                        },
+                    );
+                    conversation.model = activeConversation.model;
+                }
+            }
+
             activeConversation = conversation;
             await storage.saveConversation(activeConversation);
             return { success: true };
         } catch (err: any) {
+            log.error('SYNC error', { error: err.message });
             return { success: false, error: err.message };
         }
     });

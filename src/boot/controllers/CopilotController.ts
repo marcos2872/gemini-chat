@@ -128,8 +128,8 @@ export class CopilotController {
                 timestamp: new Date().toISOString(),
             };
             activeConversation.messages.push(userMsg);
-            // Optional: Save here or rely on tool callback/final save
-            // this.storage.saveConversation(activeConversation).catch(console.error);
+            // Save here to ensure user message is persisted before any potential errors
+            await this.storage.saveConversation(activeConversation);
 
             await this.mcpManager.connectAll();
 
@@ -193,6 +193,20 @@ export class CopilotController {
             };
             activeConversation.messages.push(assistantMsg);
 
+            log.info('Saving conversation state', {
+                id: activeConversation.id,
+                messageCount: activeConversation.messages.length,
+                model: activeConversation.model,
+                lastMessage: assistantMsg.content.substring(0, 50),
+            });
+
+            if (!activeConversation.model) {
+                log.warn('Model missing in activeConversation, attempting to restore', {
+                    clientModel: this.copilotClient.modelName,
+                });
+                activeConversation.model = this.copilotClient.modelName || 'copilot-chat';
+            }
+
             await this.storage.saveConversation(activeConversation);
 
             if (win) {
@@ -202,6 +216,20 @@ export class CopilotController {
             return { success: true };
         } catch (err: any) {
             log.error('Copilot chat error', { error: err.message });
+
+            const errorMsg = {
+                id: crypto.randomUUID(),
+                role: 'assistant',
+                content: `Error: ${err.message}`, // Detailed error for debug
+                timestamp: new Date().toISOString(),
+            };
+            activeConversation.messages.push(errorMsg);
+            await this.storage.saveConversation(activeConversation);
+
+            if (win) {
+                win.webContents.send(IPC_CHANNELS.CONVERSATION.UPDATE, activeConversation);
+            }
+
             return { success: false, error: err.message };
         }
     }
