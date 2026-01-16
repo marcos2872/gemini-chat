@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput, type Key } from 'ink';
 
 interface InputProps {
     onSubmit: (value: string) => void;
@@ -20,7 +20,7 @@ export const Input = ({ onSubmit, isActive, placeholder }: InputProps) => {
         return () => clearInterval(timer);
     }, [isActive]);
 
-    useInput((input: string, key: any) => {
+    useInput((input: string, key: Key) => {
         if (!isActive) return;
 
         if (key.return) {
@@ -33,6 +33,10 @@ export const Input = ({ onSubmit, isActive, placeholder }: InputProps) => {
 
         if (key.delete) {
             setValue((prev) => prev.slice(0, -1));
+            return;
+        }
+
+        if (key.upArrow || key.downArrow || key.pageUp || key.pageDown) {
             return;
         }
 

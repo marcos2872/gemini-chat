@@ -33,11 +33,11 @@ export const App = () => {
         <Box flexDirection="column" padding={1} height="100%">
             <Header provider={chat.provider} model={chat.model} status={chat.status} />
 
-            <Box flexGrow={1} flexDirection="column" overflowY="hidden">
+            <Box flexGrow={1} flexDirection="column" minHeight={20}>
                 <MessageList messages={chat.conversation.messages} />
             </Box>
 
-            <Box borderStyle="single" borderColor="gray" paddingX={1}>
+            <Box borderStyle="single" borderColor="gray" paddingX={1} height={3}>
                 <Input
                     onSubmit={onInputSubmit}
                     isActive={!chat.isProcessing}

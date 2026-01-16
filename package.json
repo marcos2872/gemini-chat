@@ -4,7 +4,7 @@
   "description": "",
   "main": "dist/main/boot/main.js",
   "scripts": {
-    "build:cli": "esbuild src/cli/index.tsx --bundle --platform=node --format=esm --outfile=dist/cli.mjs --packages=external --loader:.tsx=tsx",
+    "build:cli": "rm -rf dist && esbuild src/cli/index.tsx --bundle --platform=node --format=esm --outfile=dist/cli.mjs --packages=external --loader:.tsx=tsx",
     "cli": "npm run build:cli && node dist/cli.mjs",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,json,md}\"",

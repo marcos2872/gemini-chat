@@ -3,7 +3,7 @@ import { render } from 'ink';
 import { App } from './ui/App';
 import meow from 'meow';
 
-const cli = meow(
+meow(
     `
 	Usage
 	  $ ia-chat
@@ -25,4 +25,13 @@ const cli = meow(
     },
 );
 
-render(<App name={cli.flags.name} />);
+const enterAltScreen = () => process.stdout.write('\x1b[?1049h');
+const exitAltScreen = () => process.stdout.write('\x1b[?1049l');
+
+enterAltScreen();
+
+const app = render(<App />);
+
+app.waitUntilExit().then(() => {
+    exitAltScreen();
+});
