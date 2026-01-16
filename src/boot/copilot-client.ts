@@ -326,11 +326,11 @@ export class CopilotClient {
                             const stableArgs = sortKeys(args);
                             const toolSignature = `${functionName}:${JSON.stringify(stableArgs)}`;
 
-                            log.debug('Checking tool signature', {
-                                signature: toolSignature,
-                                deniedHasIt: deniedTools.has(toolSignature),
-                                deniedSize: deniedTools.size,
-                            });
+                            // log.debug('Checking tool signature', {
+                            //     signature: toolSignature,
+                            //     deniedHasIt: deniedTools.has(toolSignature),
+                            //     deniedSize: deniedTools.size,
+                            // });
 
                             if (deniedTools.has(toolSignature)) {
                                 log.warn('Auto-denying already rejected tool', {
@@ -353,12 +353,11 @@ export class CopilotClient {
                             } else {
                                 try {
                                     result = await mcpManager.callTool(functionName, args);
+                                    log.debug('Tool executed', { tool: functionName });
                                 } catch (err: any) {
                                     result = { error: err.message };
                                 }
                             }
-
-                            log.debug('Tool result', { tool: functionName, result });
 
                             // Append Tool Output
                             messages.push({

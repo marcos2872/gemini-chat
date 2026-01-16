@@ -193,12 +193,12 @@ export class CopilotController {
             };
             activeConversation.messages.push(assistantMsg);
 
-            log.info('Saving conversation state', {
-                id: activeConversation.id,
-                messageCount: activeConversation.messages.length,
-                model: activeConversation.model,
-                lastMessage: assistantMsg.content.substring(0, 50),
-            });
+            // log.info('Saving conversation state', {
+            //     id: activeConversation.id,
+            //     messageCount: activeConversation.messages.length,
+            //     model: activeConversation.model,
+            //     lastMessage: assistantMsg.content.substring(0, 50),
+            // });
 
             if (!activeConversation.model) {
                 log.warn('Model missing in activeConversation, attempting to restore', {

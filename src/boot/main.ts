@@ -133,14 +133,14 @@ app.whenReady().then(async () => {
     );
     router.registerHandler(IPC_CHANNELS.CONVERSATION.SYNC, async (event, conversation: any) => {
         try {
-            log.info('SYNC request received', {
-                id: conversation.id,
-                msgCount: conversation.messages?.length,
-                model: conversation.model,
-                currentId: activeConversation?.id,
-                currentMsgCount: activeConversation?.messages?.length,
-                currentModel: activeConversation?.model,
-            });
+            // log.info('SYNC request received', {
+            //     id: conversation.id,
+            //     msgCount: conversation.messages?.length,
+            //     model: conversation.model,
+            //     currentId: activeConversation?.id,
+            //     currentMsgCount: activeConversation?.messages?.length,
+            //     currentModel: activeConversation?.model,
+            // });
 
             if (activeConversation && activeConversation.id === conversation.id) {
                 // Protection: Do not overwrite if we have more messages
