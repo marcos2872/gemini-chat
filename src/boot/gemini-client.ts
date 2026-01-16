@@ -206,21 +206,29 @@ export class GeminiClient {
                 log.info('Received tool calls', { count: functionCalls.length });
 
                 for (const call of functionCalls) {
+                    let result: any;
+                    let approved = true;
+
                     // Approval
                     if (typeof onApproval === 'function') {
-                        if (!(await onApproval(call.name, call.args))) {
-                            throw new Error('User denied tool execution.');
-                        }
+                        approved = await onApproval(call.name, call.args);
                     }
 
-                    // Execution
-                    let result: any;
-                    try {
-                        result = await mcpManager.callTool(call.name, call.args);
-                        log.debug('Tool executed', { tool: call.name });
-                    } catch (e: any) {
-                        log.error('Tool execution failed', { tool: call.name, error: e.message });
-                        result = { error: e.message };
+                    if (!approved) {
+                        log.warn('Tool execution rejected', { tool: call.name });
+                        result = { error: 'User denied tool execution.' };
+                    } else {
+                        // Execution
+                        try {
+                            result = await mcpManager.callTool(call.name, call.args);
+                            log.debug('Tool executed', { tool: call.name });
+                        } catch (e: any) {
+                            log.error('Tool execution failed', {
+                                tool: call.name,
+                                error: e.message,
+                            });
+                            result = { error: e.message };
+                        }
                     }
 
                     // Create Function Response Part
