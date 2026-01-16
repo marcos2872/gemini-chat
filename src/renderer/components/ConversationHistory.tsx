@@ -11,6 +11,7 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({ onSelect, onD
     const [conversations, setConversations] = useState<ConversationSummary[]>([]);
     const { listConversations, deleteConversation } = useConversation();
 
+    // Removed polling (setInterval) for performance
     useEffect(() => {
         const load = async () => {
             try {
@@ -20,10 +21,12 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({ onSelect, onD
                 console.error(e);
             }
         };
-        // Poll for updates in case new chat is active
-        const interval = setInterval(load, 2000);
         load();
-        return () => clearInterval(interval);
+
+        // Optional: Listen for window focus to refresh
+        const handleFocus = () => load();
+        window.addEventListener('focus', handleFocus);
+        return () => window.removeEventListener('focus', handleFocus);
     }, [listConversations]);
 
     const handleDelete = async (e: React.MouseEvent, id: string) => {
@@ -36,22 +39,35 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({ onSelect, onD
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.5rem' }}>
+        <div
+            style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.5rem' }}
+            role="list"
+        >
             {Array.isArray(conversations) &&
                 conversations.map((c) => (
-                    <div
+                    <button
                         key={c.id}
                         onClick={() => onSelect(c.id)}
+                        role="listitem"
+                        aria-label={`Conversation from ${new Date(c.startTime).toLocaleDateString()}`}
                         style={{
                             padding: '0.8rem',
-                            backgroundColor: '#333',
+                            backgroundColor: 'var(--bg-tertiary)',
                             borderRadius: '6px',
                             cursor: 'pointer',
-                            border: '1px solid #444',
+                            border: '1px solid var(--border-light)',
                             transition: 'background 0.2s',
+                            textAlign: 'left',
+                            width: '100%',
+                            color: 'inherit',
+                            display: 'block',
                         }}
-                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#444')}
-                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#333')}
+                        onMouseEnter={(e) =>
+                            (e.currentTarget.style.backgroundColor = 'var(--bg-hover)')
+                        }
+                        onMouseLeave={(e) =>
+                            (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')
+                        }
                     >
                         <div
                             style={{
@@ -60,7 +76,7 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({ onSelect, onD
                                 marginBottom: '0.2rem',
                             }}
                         >
-                            <span style={{ fontSize: '0.7rem', color: '#9DA5B4' }}>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
                                 {new Date(c.endTime || c.startTime).toLocaleDateString()}{' '}
                                 {new Date(c.endTime || c.startTime).toLocaleTimeString([], {
                                     hour: '2-digit',
@@ -71,34 +87,42 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({ onSelect, onD
                                         style={{
                                             marginLeft: '8px',
                                             padding: '2px 6px',
-                                            backgroundColor: '#444',
+                                            backgroundColor: 'var(--bg-quartary)',
                                             borderRadius: '4px',
                                             fontSize: '0.65rem',
-                                            color: '#ccc',
+                                            color: 'var(--text-tertiary)',
                                         }}
                                     >
                                         {c.model}
                                     </span>
                                 )}
                             </span>
-                            <button
+                            <span
                                 onClick={(e) => handleDelete(e, c.id)}
+                                role="button"
+                                tabIndex={0}
+                                aria-label="Delete conversation"
                                 style={{
                                     background: 'none',
                                     border: 'none',
-                                    color: '#ff6b6b',
+                                    color: 'var(--danger)',
                                     cursor: 'pointer',
                                     fontSize: '1rem',
                                     lineHeight: 0.8,
                                 }}
-                                title="Delete"
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        handleDelete(e as any, c.id);
+                                    }
+                                }}
                             >
                                 &times;
-                            </button>
+                            </span>
                         </div>
                         <div
                             style={{
-                                color: '#ECECEC',
+                                color: 'var(--text-primary)',
                                 fontSize: '0.8rem',
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
@@ -107,7 +131,7 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({ onSelect, onD
                         >
                             {c.title || `Conversation ${new Date(c.startTime).toLocaleString()}`}
                         </div>
-                    </div>
+                    </button>
                 ))}
         </div>
     );

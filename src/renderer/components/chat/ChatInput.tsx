@@ -40,8 +40,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         <div
             style={{
                 padding: '12px',
-                borderTop: '1px solid #3E3E42',
-                backgroundColor: '#1E1E1E',
+                borderTop: '1px solid var(--border)',
+                backgroundColor: 'var(--bg-primary)',
             }}
         >
             <textarea
@@ -52,9 +52,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 style={{
                     width: '100%',
                     height: '80px',
-                    backgroundColor: '#252526',
-                    border: '1px solid #3E3E42',
-                    color: '#ECECEC',
+                    backgroundColor: 'var(--bg-secondary)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-primary)',
                     padding: '0.5rem',
                     borderRadius: '6px',
                     resize: 'none',
@@ -88,7 +88,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                         disabled={loading}
                         style={{
                             padding: '6px 16px',
-                            backgroundColor: loading ? '#555' : '#007ACC',
+                            backgroundColor: loading ? 'var(--bg-hover)' : 'var(--accent)',
                             color: 'white',
                             border: 'none',
                             borderRadius: '4px',

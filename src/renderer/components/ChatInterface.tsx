@@ -215,7 +215,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 flex: 1,
                 overflow: 'hidden',
                 position: 'relative',
-                backgroundColor: '#1E1E1E',
+                backgroundColor: 'var(--bg-primary)',
             }}
         >
             <ChatMessages

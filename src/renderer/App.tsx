@@ -95,15 +95,15 @@ const App: React.FC = () => {
                     width: '300px',
                     display: 'flex',
                     flexDirection: 'column',
-                    backgroundColor: '#252526',
-                    borderRight: '1px solid #3E3E42',
+                    backgroundColor: 'var(--bg-secondary)',
+                    borderRight: '1px solid var(--border)',
                 }}
             >
                 {/* History Section - Top */}
                 <div
                     style={{
                         height: '50%',
-                        borderBottom: '1px solid #3E3E42',
+                        borderBottom: '1px solid var(--border)',
                         display: 'flex',
                         flexDirection: 'column',
                         overflow: 'hidden',
@@ -112,7 +112,7 @@ const App: React.FC = () => {
                     <div
                         style={{
                             padding: '1rem',
-                            borderBottom: '1px solid #3E3E42',
+                            borderBottom: '1px solid var(--border)',
                             display: 'flex',
                             justifyContent: 'space-between',
                             alignItems: 'center',
@@ -123,8 +123,8 @@ const App: React.FC = () => {
                             onClick={handleNewConversation}
                             style={{
                                 background: 'none',
-                                border: '1px solid #4CAF50',
-                                color: '#4CAF50',
+                                border: '1px solid var(--success)',
+                                color: 'var(--success)',
                                 borderRadius: '4px',
                                 cursor: 'pointer',
                                 padding: '2px 8px',

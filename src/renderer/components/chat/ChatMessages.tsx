@@ -23,7 +23,8 @@ export const ChatMessages = forwardRef<HTMLDivElement, ChatMessagesProps>(
                         style={{
                             marginBottom: '1rem',
                             alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                            backgroundColor: msg.role === 'user' ? '#2b2b2b' : 'transparent',
+                            backgroundColor:
+                                msg.role === 'user' ? 'var(--bg-quartary)' : 'transparent',
                             padding: msg.role === 'user' || msg.role === 'system' ? '1rem' : '0',
                             borderRadius: '8px',
                             maxWidth: '80%',
@@ -32,7 +33,8 @@ export const ChatMessages = forwardRef<HTMLDivElement, ChatMessagesProps>(
                     >
                         <strong
                             style={{
-                                color: msg.role === 'user' ? '#4B90F5' : '#9DA5B4',
+                                color:
+                                    msg.role === 'user' ? 'var(--accent)' : 'var(--text-secondary)',
                             }}
                         >
                             {msg.role === 'user'
@@ -58,7 +60,7 @@ export const ChatMessages = forwardRef<HTMLDivElement, ChatMessagesProps>(
                         </div>
                     </div>
                 ))}
-                {loading && <div style={{ color: '#666' }}>Typing...</div>}
+                {loading && <div style={{ color: 'var(--text-secondary)' }}>Typing...</div>}
                 <div ref={ref} />
             </div>
         );
