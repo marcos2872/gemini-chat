@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Box, Text, useInput, type Key } from 'ink';
 
 interface InputProps {
@@ -43,7 +43,17 @@ export const Input = ({ onSubmit, isActive, placeholder }: InputProps) => {
         setValue((prev) => prev + input);
     });
 
-    const cursor = isActive && cursorVisible ? '█' : ' ';
+    // Memoize cursor to prevent unnecessary re-renders
+    const cursor = useMemo(
+        () => (isActive && cursorVisible ? '█' : ' '),
+        [isActive, cursorVisible],
+    );
+
+    // Memoize placeholder display to prevent unnecessary re-renders
+    const showPlaceholder = useMemo(
+        () => value.length === 0 && placeholder,
+        [value.length, placeholder],
+    );
 
     if (!isActive) {
         return (
@@ -61,7 +71,7 @@ export const Input = ({ onSubmit, isActive, placeholder }: InputProps) => {
             <Text color="green">{'> '}</Text>
             <Text>{value}</Text>
             <Text color="green">{cursor}</Text>
-            {value.length === 0 && placeholder && <Text color="gray"> {placeholder}</Text>}
+            {showPlaceholder && <Text color="gray"> {placeholder}</Text>}
         </Box>
     );
 };

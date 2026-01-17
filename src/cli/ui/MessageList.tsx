@@ -8,6 +8,32 @@ interface Message {
     provider?: string;
 }
 
+interface MessageItemProps {
+    message: Message;
+    index: number;
+}
+
+// Memoized message item to prevent unnecessary re-renders
+const MessageItem = React.memo<MessageItemProps>(({ message }) => {
+    const isUser = message.role === 'user';
+    const senderName = isUser
+        ? 'You'
+        : message.provider
+          ? message.provider.charAt(0).toUpperCase() + message.provider.slice(1)
+          : 'Gemini';
+
+    return (
+        <Box flexDirection="column" marginBottom={1}>
+            <Text color={isUser ? 'blue' : 'green'} bold>
+                {senderName}:
+            </Text>
+            <Text>{message.content}</Text>
+        </Box>
+    );
+});
+
+MessageItem.displayName = 'MessageItem';
+
 export const MessageList = ({ messages }: { messages: Message[] }) => {
     const [scrollTop, setScrollTop] = useState(0);
     const containerRef = useRef(null);
@@ -100,23 +126,9 @@ export const MessageList = ({ messages }: { messages: Message[] }) => {
     return (
         <Box ref={containerRef} flexDirection="column" padding={1} flexGrow={1} overflowY="hidden">
             <Box ref={contentRef} flexDirection="column" marginTop={-scrollTop}>
-                {messages.map((msg, index) => {
-                    const isUser = msg.role === 'user';
-                    const senderName = isUser
-                        ? 'You'
-                        : msg.provider
-                          ? msg.provider.charAt(0).toUpperCase() + msg.provider.slice(1)
-                          : 'Gemini';
-
-                    return (
-                        <Box key={index} flexDirection="column" marginBottom={1}>
-                            <Text color={isUser ? 'blue' : 'green'} bold>
-                                {senderName}:
-                            </Text>
-                            <Text>{msg.content}</Text>
-                        </Box>
-                    );
-                })}
+                {messages.map((msg, index) => (
+                    <MessageItem key={`${msg.timestamp}-${index}`} message={msg} index={index} />
+                ))}
             </Box>
         </Box>
     );
