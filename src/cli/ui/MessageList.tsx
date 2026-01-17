@@ -5,6 +5,7 @@ interface Message {
     role: string;
     content: string;
     timestamp: string;
+    provider?: string;
 }
 
 export const MessageList = ({ messages }: { messages: Message[] }) => {
@@ -101,10 +102,16 @@ export const MessageList = ({ messages }: { messages: Message[] }) => {
             <Box ref={contentRef} flexDirection="column" marginTop={-scrollTop}>
                 {messages.map((msg, index) => {
                     const isUser = msg.role === 'user';
+                    const senderName = isUser
+                        ? 'You'
+                        : msg.provider
+                          ? msg.provider.charAt(0).toUpperCase() + msg.provider.slice(1)
+                          : 'Gemini';
+
                     return (
                         <Box key={index} flexDirection="column" marginBottom={1}>
                             <Text color={isUser ? 'blue' : 'green'} bold>
-                                {isUser ? 'You' : 'Gemini'}:
+                                {senderName}:
                             </Text>
                             <Text>{msg.content}</Text>
                         </Box>

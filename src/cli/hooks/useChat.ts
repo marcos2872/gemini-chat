@@ -105,6 +105,7 @@ export const useChat = () => {
                 role: 'model',
                 content: responseText,
                 timestamp: new Date().toISOString(),
+                provider: provider,
             };
             const finalConv = {
                 ...updatedConv,
