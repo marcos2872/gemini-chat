@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 
 interface HeaderProps {
-    provider: 'gemini' | 'copilot';
+    provider: 'gemini' | 'copilot' | 'ollama';
     model: string;
     status: string;
 }

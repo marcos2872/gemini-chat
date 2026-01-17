@@ -15,6 +15,8 @@ export interface CommandContext {
     setConversation: (c: any) => void;
     conversation: any;
     forceUpdate: () => void;
+    setMode: (mode: 'chat' | 'model-selector') => void;
+    setSelectionModels: (models: any[]) => void;
 }
 
 export const useCommands = (ctx: CommandContext) => {
@@ -149,11 +151,16 @@ Available Commands:
                         break;
                     }
                     const models = await client.listModels();
-                    const list = models
-                        .map((m: any) => `- ${m.displayName} (${m.name})`)
-                        .join('\n');
-                    ctx.addSystemMessage(`Available Models for ${ctx.provider}:\n${list}`);
-                    ctx.setStatus('Ready');
+
+                    if (models.length === 0) {
+                        ctx.addSystemMessage('No models found.');
+                        ctx.setStatus('Ready');
+                    } else {
+                        // Switch to interactive mode
+                        ctx.setSelectionModels(models);
+                        ctx.setMode('model-selector');
+                        ctx.setStatus('Select a Model');
+                    }
                 } catch (e: any) {
                     ctx.addSystemMessage(`Failed to list models: ${e.message}`);
                     ctx.setStatus('Error');

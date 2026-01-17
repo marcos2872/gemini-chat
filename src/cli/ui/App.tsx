@@ -5,6 +5,7 @@ import { Input } from './Input';
 import { useChat } from '../hooks/useChat';
 import { useCommands } from '../hooks/useCommands';
 import { Header } from './Header';
+import { ModelSelector } from './ModelSelector';
 
 export const App = () => {
     // 1. Chat State & Logic
@@ -25,6 +26,19 @@ export const App = () => {
         }
     };
 
+    const handleModelSelect = async (model: any) => {
+        await handleCommand('model', [model.name]);
+        chat.setMode('chat');
+        chat.setSelectionModels([]);
+        chat.setStatus('Ready');
+    };
+
+    const handleModelCancel = () => {
+        chat.setMode('chat');
+        chat.setSelectionModels([]);
+        chat.setStatus('Ready');
+    };
+
     if (!chat.conversation) {
         return <Text color="yellow">{chat.status}</Text>;
     }
@@ -37,10 +51,20 @@ export const App = () => {
                 <MessageList messages={chat.conversation.messages} />
             </Box>
 
+            {chat.mode === 'model-selector' && (
+                <Box paddingX={2}>
+                    <ModelSelector
+                        models={chat.selectionModels}
+                        onSelect={handleModelSelect}
+                        onCancel={handleModelCancel}
+                    />
+                </Box>
+            )}
+
             <Box borderStyle="single" borderColor="gray" paddingX={1} height={3}>
                 <Input
                     onSubmit={onInputSubmit}
-                    isActive={!chat.isProcessing}
+                    isActive={chat.mode === 'chat' && !chat.isProcessing}
                     placeholder={chat.isProcessing ? 'Thinking...' : 'Type a message or /help'}
                 />
             </Box>

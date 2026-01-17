@@ -13,6 +13,10 @@ export const useChat = () => {
     const [provider, setProvider] = useState<Provider>('gemini');
     const [model, setModel] = useState<string>('gemini-2.5-flash');
 
+    // UI Mode
+    const [mode, setMode] = useState<'chat' | 'model-selector'>('chat');
+    const [selectionModels, setSelectionModels] = useState<any[]>([]);
+
     // Initialization
     useEffect(() => {
         const init = async () => {
@@ -138,5 +142,9 @@ export const useChat = () => {
         handleSubmit,
         addSystemMessage,
         forceUpdate,
+        mode,
+        setMode,
+        selectionModels,
+        setSelectionModels,
     };
 };
