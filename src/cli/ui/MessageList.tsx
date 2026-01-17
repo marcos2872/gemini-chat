@@ -170,7 +170,7 @@ export const MessageList = forwardRef<MessageListHandle, { messages: Message[]; 
                 width={width}
                 height={viewportHeight + 2} // +2 for padding
             >
-                <Text color="gray" dimColor>
+                <Text color="gray">
                     [{scrollOffset}/{maxScrollOffset}] {shouldStickToBottom ? '▼' : '↕'}
                 </Text>
                 <Box flexDirection="column" width={contentWidth}>
