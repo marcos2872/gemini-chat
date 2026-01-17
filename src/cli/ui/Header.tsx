@@ -1,6 +1,8 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 
+import { Spinner } from './Spinner';
+
 interface HeaderProps {
     provider: 'gemini' | 'copilot' | 'ollama';
     model: string;
@@ -11,6 +13,13 @@ export const Header: React.FC<HeaderProps> = ({ provider, model, status }) => {
     const isAuth = status !== 'Not Authenticated';
     // Only show model if Ready/Thinking
     const isReady = status === 'Ready' || status === 'Thinking...';
+
+    // Check if status indicates loading
+    const isLoading =
+        status.includes('Thinking') ||
+        status.includes('Initializing') ||
+        status.includes('Checking') ||
+        status.includes('Authenticating');
 
     const statusText = isAuth ? status : 'Prevented';
     const modelText = isReady ? model : 'no models';
@@ -24,7 +33,9 @@ export const Header: React.FC<HeaderProps> = ({ provider, model, status }) => {
                 {providerText}{' '}
             </Text>
             <Text color={isAuth ? 'white' : 'red'}> {modelText} </Text>
-            <Text> │ {statusText}</Text>
+            <Text>
+                │ {isLoading && <Spinner color="yellow" />} {statusText}
+            </Text>
         </Box>
     );
 };

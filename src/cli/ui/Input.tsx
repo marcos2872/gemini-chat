@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Box, Text, useInput, type Key } from 'ink';
 
+import { Spinner } from './Spinner';
+
 interface InputProps {
     onSubmit: (value: string) => void;
     isActive: boolean;
@@ -60,7 +62,7 @@ export const Input = ({ onSubmit, isActive, placeholder }: InputProps) => {
             <Box>
                 <Text color="gray">
                     {'> '}
-                    {value || placeholder || 'Thinking...'}
+                    <Spinner color="gray" /> {value || placeholder || 'Thinking...'}
                 </Text>
             </Box>
         );
