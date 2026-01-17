@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 
+import { UI_CONFIG } from '../../shared/constants';
+
 interface Model {
     name: string;
     displayName: string;
@@ -47,7 +49,7 @@ export const ModelSelector = ({ models, onSelect, onCancel }: ModelSelectorProps
     // Enhanced version: slice the array. Let's start simple as 'ink' handles some layout.
     // Actually, for a CLI menu, usually we want a fixed window. Let's just show 10 items around the cursor.
 
-    const WINDOW_SIZE = 10;
+    const WINDOW_SIZE = UI_CONFIG.MODEL_SELECTOR_WINDOW_SIZE;
     let start = 0;
     if (selectedIndex >= WINDOW_SIZE) {
         start = selectedIndex - WINDOW_SIZE + 1;

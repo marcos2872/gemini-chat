@@ -1,4 +1,5 @@
 import { logger } from './lib/logger';
+import { AUTH_CONFIG } from '../shared/constants';
 const log = logger.copilot;
 
 const GITHUB_DEVICE_CODE_URL = 'https://github.com/login/device/code';
@@ -72,7 +73,8 @@ export class CopilotAuthService {
     async pollForToken(deviceCode: string, interval: number) {
         log.info('Starting polling for token', { interval });
         let pollInterval = Math.max(interval, 5);
-        const timeout = 600 * 1000; // 10 min timeout
+
+        const timeout = AUTH_CONFIG.POLL_TIMEOUT_MS;
         const start = Date.now();
 
         while (Date.now() - start < timeout) {
