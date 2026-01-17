@@ -99,7 +99,13 @@ export class OllamaClient {
         } catch (e: any) {
             log.error('Ollama request failed', { error: e.message });
 
-            throw new Error(`Failed to communicate with Ollama: ${e.message}`);
+            if (e.message.includes('fetch failed') || e.code === 'ECONNREFUSED') {
+                throw new Error(
+                    '📡 Não foi possível conectar ao Ollama. Verifique se ele está rodando (http://localhost:11434).',
+                );
+            }
+
+            throw new Error(`Erro no Ollama: ${e.message}`);
         }
     }
 

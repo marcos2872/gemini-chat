@@ -85,115 +85,138 @@ export class GeminiClient {
      * Main Prompt Function with Tool Loop
      */
     async sendPrompt(prompt: string, mcpManager?: any, onApproval?: any) {
-        if (!this.client) await this.initialize();
-        if (!this.client) throw new Error('Gemini Client not authenticated');
+        try {
+            if (!this.client) await this.initialize();
+            if (!this.client)
+                throw new Error('Você não está autenticado. Use o comando /auth para fazer login.');
 
-        // 1. Setup
-        this.projectId = await this.handshakeService.performHandshake(this.client, this.projectId);
-        const promptId = uuidv4();
-
-        // Add user message to history
-        this.history.push({ role: 'user', parts: [{ text: prompt }] });
-
-        // Prepare Tools
-        let geminiTools: any[] | undefined = undefined;
-        if (mcpManager) {
-            const tools = await mcpManager.getAllTools();
-            if (tools && tools.length > 0) {
-                geminiTools = this.toolService.mapToolsToGemini(tools);
-            }
-        }
-
-        const MAX_TURNS = 10;
-        let turn = 0;
-        let finalAnswer = '';
-
-        // 2. Loop
-        while (turn < MAX_TURNS) {
-            // Build Payload with current history (which includes previous turns)
-            // Filter out any empty contents from history to prevent INVALID_ARGUMENT
-            const validHistory = this.history.filter((h) => h.parts && h.parts.length > 0);
-
-            const payload = this.buildInternalRequestPayload(
-                {
-                    model: this.modelName,
-                    contents: validHistory,
-                    tools: geminiTools,
-                },
-                promptId,
+            // 1. Setup
+            this.projectId = await this.handshakeService.performHandshake(
+                this.client,
                 this.projectId,
             );
+            const promptId = uuidv4();
 
-            log.debug('Sending request', { turn });
-            const stream = await this.sendInternalChat(this.client, payload);
+            // Add user message to history
+            this.history.push({ role: 'user', parts: [{ text: prompt }] });
 
-            // Parse Full Response
-            const responseContent = await this.streamService.consumeStream(stream);
-
-            // Add Model Response to History
-            this.history.push(responseContent);
-
-            // Check for Function Calls
-            const functionCalls = responseContent.parts
-                .filter((p) => p.functionCall)
-                .map((p) => p.functionCall!);
-
-            if (functionCalls.length > 0) {
-                log.info('Received tool calls', { count: functionCalls.length });
-
-                for (const call of functionCalls) {
-                    let result: any;
-                    let approved = true;
-
-                    // Approval
-                    if (typeof onApproval === 'function') {
-                        approved = await onApproval(call.name, call.args);
-                    }
-
-                    if (!approved) {
-                        log.warn('Tool execution rejected', { tool: call.name });
-                        result = { error: 'User denied tool execution.' };
-                    } else {
-                        // Execution
-                        try {
-                            result = await mcpManager.callTool(call.name, call.args);
-                            log.debug('Tool executed', { tool: call.name });
-                        } catch (e: any) {
-                            log.error('Tool execution failed', {
-                                tool: call.name,
-                                error: e.message,
-                            });
-                            result = { error: e.message };
-                        }
-                    }
-
-                    // Create Function Response Part
-                    const toolResponsePart: Part = {
-                        functionResponse: {
-                            name: call.name,
-                            response: {
-                                name: call.name,
-                                content: result,
-                            },
-                        },
-                    };
-
-                    // Add failure/success response to history
-                    this.history.push({
-                        role: 'user', // Internal API uses 'user' (or function specific role depending on strictness, but prompt says user works)
-                        parts: [toolResponsePart],
-                    });
+            // Prepare Tools
+            let geminiTools: any[] | undefined = undefined;
+            if (mcpManager) {
+                const tools = await mcpManager.getAllTools();
+                if (tools && tools.length > 0) {
+                    geminiTools = this.toolService.mapToolsToGemini(tools);
                 }
-                // Continue loop to get model's interpretation of tool results
-                turn++;
-            } else {
-                // No function calls, this is the final text
-                finalAnswer = responseContent.parts.map((p) => p.text).join('');
-                break;
             }
-        }
 
-        return finalAnswer;
+            const MAX_TURNS = 10;
+            let turn = 0;
+            let finalAnswer = '';
+
+            // 2. Loop
+            while (turn < MAX_TURNS) {
+                // Build Payload with current history (which includes previous turns)
+                // Filter out any empty contents from history to prevent INVALID_ARGUMENT
+                const validHistory = this.history.filter((h) => h.parts && h.parts.length > 0);
+
+                const payload = this.buildInternalRequestPayload(
+                    {
+                        model: this.modelName,
+                        contents: validHistory,
+                        tools: geminiTools,
+                    },
+                    promptId,
+                    this.projectId,
+                );
+
+                log.debug('Sending request', { turn });
+                const stream = await this.sendInternalChat(this.client, payload);
+
+                // Parse Full Response
+                const responseContent = await this.streamService.consumeStream(stream);
+
+                // Add Model Response to History
+                this.history.push(responseContent);
+
+                // Check for Function Calls
+                const functionCalls = responseContent.parts
+                    .filter((p) => p.functionCall)
+                    .map((p) => p.functionCall!);
+
+                if (functionCalls.length > 0) {
+                    log.info('Received tool calls', { count: functionCalls.length });
+
+                    for (const call of functionCalls) {
+                        let result: any;
+                        let approved = true;
+
+                        // Approval
+                        if (typeof onApproval === 'function') {
+                            approved = await onApproval(call.name, call.args);
+                        }
+
+                        if (!approved) {
+                            log.warn('Tool execution rejected', { tool: call.name });
+                            result = { error: 'User denied tool execution.' };
+                        } else {
+                            // Execution
+                            try {
+                                result = await mcpManager.callTool(call.name, call.args);
+                                log.debug('Tool executed', { tool: call.name });
+                            } catch (e: any) {
+                                log.error('Tool execution failed', {
+                                    tool: call.name,
+                                    error: e.message,
+                                });
+                                result = { error: e.message };
+                            }
+                        }
+
+                        // Create Function Response Part
+                        const toolResponsePart: Part = {
+                            functionResponse: {
+                                name: call.name,
+                                response: {
+                                    name: call.name,
+                                    content: result,
+                                },
+                            },
+                        };
+
+                        // Add failure/success response to history
+                        this.history.push({
+                            role: 'user', // Internal API uses 'user' (or function specific role depending on strictness, but prompt says user works)
+                            parts: [toolResponsePart],
+                        });
+                    }
+                    // Continue loop to get model's interpretation of tool results
+                    turn++;
+                } else {
+                    // No function calls, this is the final text
+                    finalAnswer = responseContent.parts.map((p) => p.text).join('');
+                    break;
+                }
+            }
+
+            return finalAnswer;
+        } catch (error: any) {
+            const msg = error.message || '';
+            if (msg.includes('401') || msg.includes('unauthorized')) {
+                throw new Error(
+                    '🔒 Sessão expirada ou inválida (401). Faça login novamente com /auth.',
+                );
+            }
+            if (msg.includes('403') || msg.includes('permission denied')) {
+                throw new Error('🚫 Acesso negado (403). Verifique suas permissões.');
+            }
+            if (msg.includes('429') || msg.includes('resource exhausted')) {
+                throw new Error('⏳ Muitas requisições (429). Aguarde um momento.');
+            }
+            if (msg.includes('network') || msg.includes('fetch failed')) {
+                throw new Error('📡 Erro de conexão com o Gemini. Verifique sua internet.');
+            }
+            throw error;
+        }
     }
 
     private buildInternalRequestPayload(req: any, userPromptId: string, projectId?: string) {

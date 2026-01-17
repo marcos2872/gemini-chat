@@ -230,7 +230,7 @@ export class CopilotClient {
     async sendPrompt(prompt: string, mcpManager: any, onApproval: any) {
         if (!this.oauthToken) {
             log.error('sendPrompt failed: Not authenticated');
-            throw new Error('Not authenticated');
+            throw new Error('🔐 Você não está autenticado. Use o comando /auth para fazer login.');
         }
 
         log.info('Sending prompt to Copilot', {
@@ -308,7 +308,19 @@ export class CopilotClient {
                         /* ignore */
                     }
                     log.error('Chat API Error', { status: response.status, error: errorMsg });
-                    throw new Error(errorMsg);
+
+                    if (response.status === 401)
+                        throw new Error(
+                            '🔒 Sessão inválida (401). Faça login novamente com /auth.',
+                        );
+                    if (response.status === 403)
+                        throw new Error(
+                            '🚫 Acesso negado (403). Verifique suas permissões no GitHub.',
+                        );
+                    if (response.status === 429)
+                        throw new Error('⏳ Muitas requisições (429). Aguarde um momento.');
+
+                    throw new Error(`Erro na API (${response.status}): ${errorMsg}`);
                 }
 
                 const data = await response.json();
@@ -411,8 +423,12 @@ export class CopilotClient {
             }
         }
 
-        log.error('Exceeded max conversation turns');
-        throw new Error('Max conversation turns reached.');
+        if (turn >= maxTurns) {
+            log.error('Exceeded max conversation turns');
+            throw new Error('🛑 Limite de turnos da conversa atingido. Inicie uma nova conversa.');
+        }
+
+        return '';
     }
 
     _mapToolsToOpenAI(mcpTools: any[]) {
