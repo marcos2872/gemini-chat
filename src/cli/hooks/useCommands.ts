@@ -1,7 +1,8 @@
 import open from 'open';
 import { storage, gemini, copilot, copilotAuth, ollama } from '../services';
-import { Provider } from './useChat';
+import { Provider, SETTINGS_KEY } from './useChat';
 import { createLogger } from '../../boot/lib/logger';
+import { ConfigPersistence } from '../../boot/lib/config-persistence';
 const log = createLogger('CLI');
 
 export interface CommandContext {
@@ -17,6 +18,8 @@ export interface CommandContext {
     setMode: (mode: 'chat' | 'model-selector') => void;
     setSelectionModels: (models: any[]) => void;
 }
+
+type clientType = typeof gemini | typeof copilot | typeof ollama;
 
 export const useCommands = (ctx: CommandContext) => {
     const handleCommand = async (cmd: string, args: string[]) => {
@@ -41,7 +44,6 @@ Available Commands:
                     try {
                         await gemini.signIn();
                         ctx.setStatus('Ready');
-                        ctx.addSystemMessage('Gemini authentication successful.');
                     } catch (e: any) {
                         ctx.setStatus('Auth Failed');
                         ctx.addSystemMessage(`Auth failed: ${e.message}`);
@@ -52,13 +54,6 @@ Available Commands:
                         log.info('Starting Copilot Auth flow');
                         const codeData = await copilotAuth.requestDeviceCode();
                         log.info('Received codeData', codeData);
-
-                        // try {
-                        //     await clipboard.write(codeData.user_code);
-                        //     log.info('User code copied to clipboard');
-                        // } catch (err: any) {
-                        //     log.warn('Failed to copy to clipboard', { error: err.message });
-                        // }
 
                         ctx.addSystemMessage(
                             `
@@ -109,13 +104,16 @@ Opening browser for authorization... ${codeData.verification_uri}
                     ctx.setProvider(args[0] as Provider);
 
                     let defModel = 'gemini-2.5-flash';
-                    if (args[0] === 'copilot') defModel = 'gpt-4o';
                     if (args[0] === 'ollama') {
                         defModel = 'no models'; // Default fallback
                         try {
                             const models = await ollama.listModels();
                             if (models.length > 0) {
                                 defModel = models[0].name;
+                                ConfigPersistence.save(SETTINGS_KEY, {
+                                    provider: args[0],
+                                    model: defModel,
+                                });
                             }
                         } catch {
                             // ignore
@@ -128,6 +126,10 @@ Opening browser for authorization... ${codeData.verification_uri}
                                 const models = await gemini.listModels();
                                 if (models.length > 0) {
                                     defModel = models[0].name;
+                                    ConfigPersistence.save(SETTINGS_KEY, {
+                                        provider: args[0],
+                                        model: defModel,
+                                    });
                                 }
                             }
                         } catch {
@@ -141,6 +143,10 @@ Opening browser for authorization... ${codeData.verification_uri}
                                 const models = await copilot.listModels();
                                 if (models.length > 0) {
                                     defModel = models[0].name;
+                                    ConfigPersistence.save(SETTINGS_KEY, {
+                                        provider: args[0],
+                                        model: defModel,
+                                    });
                                 }
                             }
                         } catch {
@@ -165,9 +171,25 @@ Opening browser for authorization... ${codeData.verification_uri}
             case 'model':
                 if (args[0]) {
                     ctx.setModel(args[0]);
-                    if (ctx.provider === 'gemini') gemini.setModel(args[0]);
-                    else if (ctx.provider === 'copilot') copilot.setModel(args[0]);
-                    else if (ctx.provider === 'ollama') ollama.setModel(args[0]);
+                    if (ctx.provider === 'gemini') {
+                        gemini.setModel(args[0]);
+                        ConfigPersistence.save(SETTINGS_KEY, {
+                            provider: ctx.provider,
+                            model: args[0],
+                        });
+                    } else if (ctx.provider === 'copilot') {
+                        copilot.setModel(args[0]);
+                        ConfigPersistence.save(SETTINGS_KEY, {
+                            provider: ctx.provider,
+                            model: args[0],
+                        });
+                    } else if (ctx.provider === 'ollama') {
+                        ollama.setModel(args[0]);
+                        ConfigPersistence.save(SETTINGS_KEY, {
+                            provider: ctx.provider,
+                            model: args[0],
+                        });
+                    }
                     ctx.addSystemMessage(`Model set to **${args[0]}**`);
                     // Update conversation model metadata
                     if (ctx.conversation) {
@@ -182,15 +204,10 @@ Opening browser for authorization... ${codeData.verification_uri}
             case 'models':
                 ctx.setStatus('Fetching models...');
                 try {
-                    let client: any = gemini;
+                    let client: clientType = gemini;
                     if (ctx.provider === 'copilot') client = copilot;
                     if (ctx.provider === 'ollama') client = ollama;
 
-                    if (ctx.provider !== 'ollama' && !client.isConfigured()) {
-                        ctx.addSystemMessage('Please authenticate first using /auth');
-                        ctx.setStatus('Auth Required');
-                        break;
-                    }
                     const models = await client.listModels();
 
                     if (models.length === 0) {
@@ -220,18 +237,20 @@ Opening browser for authorization... ${codeData.verification_uri}
                 if (ctx.provider === 'gemini') {
                     try {
                         await gemini.signOut();
+
                         ctx.addSystemMessage('Logged out from Gemini.');
+                        ctx.setStatus('Not Authenticated');
                     } catch (e: any) {
                         ctx.addSystemMessage(`Logout failed: ${e.message}`);
                     }
                 } else if (ctx.provider === 'copilot') {
                     copilot.reset();
                     ctx.addSystemMessage('Logged out from Copilot.');
+                    ctx.setStatus('Not Authenticated');
                 } else if (ctx.provider === 'ollama') {
                     ollama.reset();
                     ctx.addSystemMessage('Ollama session reset.');
                 }
-                ctx.setStatus('Not Authenticated');
                 ctx.forceUpdate();
                 break;
             }
@@ -249,7 +268,7 @@ Opening browser for authorization... ${codeData.verification_uri}
             }
 
             case 'exit':
-                log.info('Exiting application');
+                log.info('###### Exiting application ######');
                 process.exit(0);
                 break;
 

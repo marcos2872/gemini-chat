@@ -2,8 +2,11 @@ const GITHUB_API_USER_URL = 'https://api.github.com/user';
 // const GITHUB_MODELS_CATALOG_URL = 'https://models.github.ai/catalog/models';
 // const GITHUB_INFERENCE_URL = 'https://models.github.ai/inference/chat/completions';
 import { logger } from './lib/logger';
+import { ConfigPersistence } from './lib/config-persistence';
+import { SETTINGS_KEY } from '../cli/hooks/useChat';
 
 const log = logger.copilot;
+const CONFIG_KEY = 'copilot-auth';
 
 const DEFAULT_HEADERS = {
     Accept: 'application/json',
@@ -41,10 +44,24 @@ export class CopilotClient {
         this.tokenExchangePromise = null;
     }
 
-    async initialize(oauthToken: string) {
-        this.oauthToken = oauthToken;
-        await this.exchangeToken();
-        log.info('Initialized', { model: this.modelName });
+    async initialize(oauthToken?: string): Promise<boolean> {
+        if (oauthToken) {
+            this.oauthToken = oauthToken;
+            ConfigPersistence.save(CONFIG_KEY, { oauthToken });
+        } else {
+            const saved = await ConfigPersistence.load<{ oauthToken: string }>(CONFIG_KEY);
+            if (saved?.oauthToken) {
+                this.oauthToken = saved.oauthToken;
+                log.info('OAuth token loaded from persistence');
+            }
+        }
+
+        if (this.oauthToken) {
+            await this.exchangeToken();
+            log.info('Initialized', { model: this.modelName });
+            return true;
+        }
+        return false;
     }
 
     private async exchangeToken() {
@@ -61,14 +78,21 @@ export class CopilotClient {
         this.tokenExchangePromise = (async () => {
             try {
                 log.debug('Exchanging OAuth token for API Token...');
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
                 const response = await fetch('https://api.github.com/copilot_internal/v2/token', {
                     headers: {
                         ...DEFAULT_HEADERS,
                         Authorization: `token ${this.oauthToken}`,
                     },
+                    signal: controller.signal,
                 });
 
+                clearTimeout(timeoutId);
+
                 if (!response.ok) {
+                    log.error('Token exchange failed', { status: response.status });
                     throw new Error(`Token exchange failed: ${response.status}`);
                 }
 
@@ -80,7 +104,7 @@ export class CopilotClient {
                     data.endpoints?.api?.replace(/\/$/, '') || 'https://api.githubcopilot.com';
                 this.tokenExpiresAt = (data.expires_at || Date.now() / 1000 + 1500) * 1000; // default 25 min
 
-                log.debug('Token exchanged', { endpoint: this.apiEndpoint });
+                log.debug('Token exchanged successfully', { endpoint: this.apiEndpoint });
             } catch (error: any) {
                 log.error('Token exchange error', { error: error.message });
                 throw error;
@@ -97,6 +121,7 @@ export class CopilotClient {
     }
 
     isConfigured() {
+        log.info('Checking if Copilot client is configured', !!this.oauthToken);
         return !!this.oauthToken;
     }
 
@@ -139,7 +164,7 @@ export class CopilotClient {
      * List available models.
      * @returns {Promise<Array<{name: string, displayName: string}>>}
      */
-    async listModels() {
+    async listModels(): Promise<Array<{ name: string; displayName: string }>> {
         if (!this.oauthToken) return [];
 
         try {
@@ -416,6 +441,8 @@ export class CopilotClient {
     }
 
     reset() {
+        ConfigPersistence.delete(CONFIG_KEY).catch(() => {});
+        ConfigPersistence.delete(SETTINGS_KEY).catch(() => {});
         this.oauthToken = null;
         this.apiToken = null;
         this.apiEndpoint = null;

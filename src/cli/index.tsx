@@ -33,7 +33,7 @@ const exitAltScreen = () => process.stdout.write('\x1b[?1049l');
 enterAltScreen();
 
 const app = render(<App />);
-log.info('Application started');
+log.info('###### Application started ######');
 
 app.waitUntilExit().then(() => {
     exitAltScreen();

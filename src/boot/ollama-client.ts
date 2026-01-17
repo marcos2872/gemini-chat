@@ -43,7 +43,7 @@ export class OllamaClient {
         log.info('Model set', { model });
     }
 
-    async listModels() {
+    async listModels(): Promise<Array<{ name: string; displayName: string }>> {
         try {
             log.info('Fetching available models');
             const response = await fetch(`${this.baseUrl}/api/tags`);

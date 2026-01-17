@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react';
 import { storage, mcpService, gemini, copilot, ollama } from '../services';
+import { ConfigPersistence } from '../../boot/lib/config-persistence';
+import { createLogger } from '../../boot/lib/logger';
+
+const log = createLogger('useChat');
 
 export type Provider = 'gemini' | 'copilot' | 'ollama';
+
+export const SETTINGS_KEY = 'app-settings';
 
 export const useChat = () => {
     // State
@@ -10,8 +16,17 @@ export const useChat = () => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [, setTick] = useState(0);
 
-    const [provider, setProvider] = useState<Provider>('gemini');
-    const [model, setModel] = useState<string>('gemini-2.5-flash');
+    const [provider, setProviderState] = useState<Provider>('gemini');
+    const [model, setModelState] = useState<string>('gemini-2.5-flash');
+
+    // Wrappers to persist
+    const setProvider = async (p: Provider) => {
+        setProviderState(p);
+    };
+
+    const setModel = async (m: string) => {
+        setModelState(m);
+    };
 
     // UI Mode
     const [mode, setMode] = useState<'chat' | 'model-selector'>('chat');
@@ -20,25 +35,90 @@ export const useChat = () => {
     // Initialization
     useEffect(() => {
         const init = async () => {
+            log.info('Init: Starting chat hook initialization');
             try {
-                await gemini.initialize();
+                // 1. Load settings
+                log.info('Init: Loading app settings');
+                const settings = await ConfigPersistence.load<{
+                    provider: Provider;
+                    model: string;
+                }>(SETTINGS_KEY);
+                let initialProvider = provider;
+                let initialModel = model;
+
+                // 2. Initialize Providers
+                log.info('Init: Initializing Gemini');
+                const geminiOk = await gemini.initialize();
+
+                log.info('Init: Initializing Copilot');
+                const copilotOk = await copilot.initialize();
+
+                log.info('Init: Initializing Ollama');
+                const ollamaOk = await ollama.validateConnection();
+
+                if (settings) {
+                    log.info('Init: Settings loaded from disk', settings);
+                    initialProvider = settings.provider;
+                    initialModel = settings.model;
+                    setProviderState(settings.provider);
+                    setModelState(settings.model);
+                } else {
+                    log.info('Init: No settings found, auto-detecting provider');
+                    if (geminiOk) {
+                        initialProvider = 'gemini';
+                        const models = await gemini.listModels();
+                        initialModel = models.length > 0 ? models[0].name : 'no models found';
+                    } else if (copilotOk) {
+                        initialProvider = 'copilot';
+                        const models = await copilot.listModels();
+                        initialModel = models.length > 0 ? models[0].name : 'no models found';
+                    } else if (ollamaOk) {
+                        initialProvider = 'ollama';
+                        const models = await ollama.listModels();
+                        initialModel = models.length > 0 ? models[0].name : 'no models found';
+                    }
+
+                    setProviderState(initialProvider);
+                    setModelState(initialModel);
+
+                    // Save initial selection
+                    await ConfigPersistence.save(SETTINGS_KEY, {
+                        provider: initialProvider,
+                        model: initialModel,
+                    });
+                }
+
+                log.info('Init: Initializing MCP');
                 await mcpService.init();
+
+                // 3. Sync model to clients
+                log.info('Init: Syncing model to clients', {
+                    provider: initialProvider,
+                    model: initialModel,
+                });
+                if (initialProvider === 'gemini') gemini.setModel(initialModel);
+                else if (initialProvider === 'copilot') copilot.setModel(initialModel);
+                else if (initialProvider === 'ollama') ollama.setModel(initialModel);
+
                 const newConv = storage.createConversation();
-                (newConv as any).model = model;
+                (newConv as any).model = initialModel;
                 setConversation(newConv);
 
                 // Initial status check
-                if (provider === 'gemini' && !gemini.isConfigured()) {
+                log.info('Init: Performing initial status check');
+                if (initialProvider === 'gemini' && !gemini.isConfigured()) {
                     setStatus('Not Authenticated');
-                } else if (provider === 'copilot' && !copilot.isConfigured()) {
+                } else if (initialProvider === 'copilot' && !copilot.isConfigured()) {
                     setStatus('Not Authenticated');
-                } else if (provider === 'ollama') {
+                } else if (initialProvider === 'ollama') {
                     const connected = await ollama.validateConnection();
                     setStatus(connected ? 'Ready' : 'Ollama Not Detected');
                 } else {
                     setStatus('Ready');
                 }
+                log.info('Init: Initialization complete');
             } catch (err: any) {
+                log.error('Init: Initialization failed', { error: err.message });
                 setStatus(`Error: ${err.message}`);
             }
         };

@@ -40,14 +40,20 @@ export class GeminiClient {
         this.listModelsService = new GeminiListModelsService();
     }
 
-    async initialize() {
+    async initialize(): Promise<boolean> {
         try {
+            log.info('Initializing Gemini client...');
             this.client = await this.authService.getAuthenticatedClient(false);
             const accessToken = await this.client.getAccessToken();
             if (!accessToken.token) throw new Error('Failed to retrieve access token');
-            log.info('Client initialized (Internal API mode)', { model: this.modelName });
-        } catch {
+            log.info('Gemini client initialized successfully', { model: this.modelName });
+            return true;
+        } catch (e: any) {
+            log.info('Gemini client initialization skipped or failed (not authenticated)', {
+                error: e.message,
+            });
             // Silent fail expected
+            return false;
         }
     }
 
@@ -62,6 +68,7 @@ export class GeminiClient {
     }
 
     isConfigured() {
+        log.info('Checking if Gemini client is configured', !!this.client);
         return !!this.client;
     }
 
@@ -248,6 +255,7 @@ export class GeminiClient {
 
     async signOut() {
         await this.authService.signOut();
+
         this.shutdown();
     }
 
