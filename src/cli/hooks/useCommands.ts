@@ -2,6 +2,8 @@ import clipboard from 'clipboardy';
 import open from 'open';
 import { storage, gemini, copilot, copilotAuth, ollama } from '../services';
 import { Provider } from './useChat';
+import { createLogger } from '../../boot/lib/logger';
+const log = createLogger('CLI');
 
 export interface CommandContext {
     provider: Provider;
@@ -199,6 +201,7 @@ Available Commands:
             }
 
             case 'exit':
+                log.info('Exiting application');
                 process.exit(0);
                 break;
 

@@ -90,6 +90,7 @@ export const logger = {
     mcp: createLogger('MCP'),
     auth: createLogger('Auth'),
     storage: createLogger('Storage'),
+    cli: createLogger('CLI'),
 };
 
 export default {
