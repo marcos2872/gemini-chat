@@ -89,12 +89,15 @@ export class OllamaClient {
             }
 
             const data: any = await response.json();
+            // const responseText =
+            //     'Please provide answers to these clarifying questions so I can give you a precise technical guide tailored to your specific setup and goals.';
             const responseText = data.message?.content || '';
 
             log.info('Received response from Ollama', { length: responseText.length });
 
             this.history.push({ role: 'assistant', content: responseText });
 
+            // return responseText;
             return responseText;
         } catch (e: any) {
             log.error('Ollama request failed', { error: e.message });

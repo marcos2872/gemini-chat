@@ -38,6 +38,7 @@ export const Input = ({ onSubmit, isActive, placeholder }: InputProps) => {
             return;
         }
 
+        // Explicitly ignore scrolling keys to allow MessageList to handle them
         if (key.upArrow || key.downArrow || key.pageUp || key.pageDown) {
             return;
         }

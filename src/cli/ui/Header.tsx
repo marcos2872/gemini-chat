@@ -26,7 +26,7 @@ export const Header: React.FC<HeaderProps> = ({ provider, model, status }) => {
     const providerText = provider.toUpperCase();
 
     return (
-        <Box borderStyle="round" borderColor="cyan" paddingX={1} justifyContent="space-between">
+        <Box borderStyle="round" borderColor="cyan" justifyContent="space-between" width="100%">
             <Text bold>IA Chat CLI</Text>
             <Text color={isAuth ? 'green' : 'red'} bold>
                 {' '}

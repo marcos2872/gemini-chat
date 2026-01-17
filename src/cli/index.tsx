@@ -27,14 +27,8 @@ meow(
     },
 );
 
-const enterAltScreen = () => process.stdout.write('\x1b[?1049h');
-const exitAltScreen = () => process.stdout.write('\x1b[?1049l');
-
-enterAltScreen();
-
-const app = render(<App />);
+// @ts-ignore
+const app = render(<App />, { altScreen: true });
 log.info('###### Application started ######');
 
-app.waitUntilExit().then(() => {
-    exitAltScreen();
-});
+await app.waitUntilExit();
