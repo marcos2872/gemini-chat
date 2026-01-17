@@ -9,12 +9,33 @@ export type Provider = 'gemini' | 'copilot' | 'ollama';
 
 export const SETTINGS_KEY = 'app-settings';
 
-export const useChat = () => {
+export interface CommandContext {
+    provider: Provider;
+    model: string;
+    conversation: any;
+    isProcessing: boolean;
+    status: string;
+    mode: 'chat' | 'model-selector';
+    selectionModels: any[];
+    setProvider: (p: Provider) => void;
+    setModel: (m: string) => void;
+    setStatus: (s: string) => void;
+    addSystemMessage: (msg: string, providerOverride?: string) => void;
+    setConversation: (c: any) => void;
+    forceUpdate: () => void;
+    setMode: (mode: 'chat' | 'model-selector') => void;
+    setSelectionModels: (models: any[]) => void;
+    removeSystemMessage: (text: string, providerOverride?: string) => void;
+    setIsProcessing: (isProcessing: boolean) => void;
+    handleSubmit: (text: string) => void;
+}
+
+export const useChat = (): CommandContext => {
     // State
     const [conversation, setConversation] = useState<any>(null);
     const [status, setStatus] = useState('Initializing...');
     const [isProcessing, setIsProcessing] = useState(false);
-    const [, setTick] = useState(0);
+    const [_, setTick] = useState(0);
 
     const [provider, setProviderState] = useState<Provider>('gemini');
     const [model, setModelState] = useState<string>('gemini-2.5-flash');
@@ -156,6 +177,20 @@ export const useChat = () => {
         }));
     };
 
+    const removeSystemMessage = (text: string, providerOverride?: string) => {
+        if (!conversation) return;
+
+        setConversation((prev: any) => ({
+            ...prev,
+            messages: prev.messages.filter(
+                (msg: any) =>
+                    msg.content !== text ||
+                    msg.role !== 'system' ||
+                    msg.provider !== (providerOverride || provider),
+            ),
+        }));
+    };
+
     const forceUpdate = () => setTick((t) => t + 1);
 
     // Chat Handler
@@ -226,6 +261,7 @@ export const useChat = () => {
         setModel,
         handleSubmit,
         addSystemMessage,
+        removeSystemMessage,
         forceUpdate,
         mode,
         setMode,

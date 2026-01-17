@@ -1,23 +1,9 @@
 import open from 'open';
 import { storage, gemini, copilot, copilotAuth, ollama } from '../services';
-import { Provider, SETTINGS_KEY } from './useChat';
+import { CommandContext, Provider, SETTINGS_KEY } from './useChat';
 import { createLogger } from '../../boot/lib/logger';
 import { ConfigPersistence } from '../../boot/lib/config-persistence';
 const log = createLogger('CLI');
-
-export interface CommandContext {
-    provider: Provider;
-    setProvider: (p: Provider) => void;
-    model: string;
-    setModel: (m: string) => void;
-    setStatus: (s: string) => void;
-    addSystemMessage: (msg: string, providerOverride?: string) => void;
-    setConversation: (c: any) => void;
-    conversation: any;
-    forceUpdate: () => void;
-    setMode: (mode: 'chat' | 'model-selector') => void;
-    setSelectionModels: (models: any[]) => void;
-}
 
 type clientType = typeof gemini | typeof copilot | typeof ollama;
 
@@ -55,15 +41,14 @@ Available Commands:
                         const codeData = await copilotAuth.requestDeviceCode();
                         log.info('Received codeData', codeData);
 
-                        ctx.addSystemMessage(
-                            `
+                        const sysMsg = `
 **Copilot Auth**
 User Code: **${codeData.user_code}**
 
 Opening browser for authorization... ${codeData.verification_uri}
-`,
-                            'copilot',
-                        );
+`;
+
+                        ctx.addSystemMessage(sysMsg, 'copilot');
 
                         ctx.forceUpdate();
 
@@ -86,10 +71,7 @@ Opening browser for authorization... ${codeData.verification_uri}
 
                         await copilot.initialize(tokenData.accessToken);
                         ctx.setStatus('Ready');
-                        const newConv = storage.createConversation();
-                        (newConv as any).model = ctx.model;
-                        ctx.setConversation(newConv);
-                        // ctx.addSystemMessage('Copilot authentication successful.', 'copilot');
+                        ctx.removeSystemMessage(sysMsg, 'copilot');
                         ctx.forceUpdate();
                     } catch (e: any) {
                         log.error('Copilot Auth Error', { error: e.message });

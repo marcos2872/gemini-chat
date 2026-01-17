@@ -7,6 +7,7 @@
     "build:cli": "rm -rf dist && esbuild src/cli/index.tsx --bundle --platform=node --format=esm --outfile=dist/cli.mjs --packages=external --loader:.tsx=tsx",
     "cli": "npm run build:cli && node dist/cli.mjs",
     "logs": "tail -f ~/.gemini-desktop/logs/cli.log",
+    "logs:clear": "rm -f ~/.gemini-desktop/logs/cli.log",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,json,md}\"",
     "prepare": "husky"
