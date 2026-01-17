@@ -104,6 +104,35 @@ O projeto implementa um loop de agência autônomo (ReAct) no client-side:
 
 ---
 
+## 🔖 CONVENÇÃO DE COMMITS
+
+Seguimos [Conventional Commits](https://www.conventionalcommits.org/):
+
+## Regras Principais
+
+1.  **Tipo**: Deve ser um dos tipos permitidos (veja abaixo).
+2.  **Minúsculo**: A descrição deve começar com letra minúscula.
+3.  **Sem Ponto**: Não use ponto final `.` no final da linha.
+4.  **Tamanho**: Máximo de **100 caracteres**.
+
+## Tipos Permitidos
+
+| Tipo         | Descrição                              | Exemplo                             |
+| :----------- | :------------------------------------- | :---------------------------------- |
+| **feat**     | Nova funcionalidade (Feature)          | `feat: cria rota de cadastro`       |
+| **fix**      | Correção de bug                        | `fix: corrige erro no upload`       |
+| **docs**     | Documentação                           | `docs: atualiza readme`             |
+| **style**    | Formatação (espaços, ponto e vírgula)  | `style: formata main.ts`            |
+| **refactor** | Refatoração (sem mudar funcionalidade) | `refactor: simplifica auth service` |
+| **test**     | Testes                                 | `test: adiciona teste e2e`          |
+| **chore**    | Tarefas de build, configs, deps        | `chore: atualiza dependências`      |
+| **perf**     | Melhoria de performance                | `perf: otimiza query de usuários`   |
+| **ci**       | Integração Contínua                    | `ci: adiciona github actions`       |
+
+**Exemplo**: `feat(users): adiciona endpoint de atualização de avatar`
+
+---
+
 ## 🚨 CHECKLIST FINAL
 
 Antes de entregar:
