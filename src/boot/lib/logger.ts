@@ -68,9 +68,8 @@ class ScopeLogger {
         writeLog('ERROR', this.scope, text, meta);
     }
 
-    debug(_text: any) {
-        // Uncomment to enable debug logs
-        // writeLog('DEBUG', this.scope, text);
+    debug(text: any, meta?: any) {
+        writeLog('DEBUG', this.scope, text, meta);
     }
 
     log(text: any) {

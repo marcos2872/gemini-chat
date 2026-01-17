@@ -1,3 +1,6 @@
+import { logger } from './lib/logger';
+const log = logger.copilot;
+
 const GITHUB_DEVICE_CODE_URL = 'https://github.com/login/device/code';
 const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';
 const CLIENT_DEFAULTS = { scope: 'read:user' };
@@ -14,6 +17,7 @@ export class CopilotAuthService {
      * POST https://github.com/login/device/code
      */
     async requestDeviceCode() {
+        log.info('Requesting device code...');
         try {
             const response = await fetch(GITHUB_DEVICE_CODE_URL, {
                 method: 'POST',
@@ -35,7 +39,7 @@ export class CopilotAuthService {
                     const errData = await response.json();
                     errorDetails = errData.error_description || errData.error || errorDetails;
                 } catch (e: any) {
-                    console.error('[CopilotAuthService] Request Code Error:', e.message);
+                    log.error('Failed to parse error response', { error: e.message });
                 }
 
                 throw new Error(errorDetails);
@@ -48,9 +52,13 @@ export class CopilotAuthService {
                 throw new Error(data.error_description || data.error);
             }
 
+            log.info('Device code received', {
+                user_code: data.user_code,
+                verification_uri: data.verification_uri,
+            });
             return data;
         } catch (error: any) {
-            console.error('[CopilotAuthService] Request Code Error:', error.message);
+            log.error('Request Device Code Failed', { error: error.message });
             throw error;
         }
     }
@@ -62,6 +70,7 @@ export class CopilotAuthService {
      * @param {number} interval
      */
     async pollForToken(deviceCode: string, interval: number) {
+        log.info('Starting polling for token', { interval });
         let pollInterval = Math.max(interval, 5);
         const timeout = 600 * 1000; // 10 min timeout
         const start = Date.now();
@@ -84,10 +93,7 @@ export class CopilotAuthService {
 
                 // Network or Server Errors
                 if (!response.ok) {
-                    console.warn(`[CopilotAuthService] Poll request failed: ${response.status}`);
-                    // Non-fatal, just wait and retry unless it's 400/401/403 permanent failures?
-                    // GitHub docs say some errors are returned as 200 with error field, but 404/500 might happen.
-                    // We'll treat HTTP errors as retriable for now mostly, or throw if critical.
+                    log.warn(`Poll request failed: ${response.status}`);
                 } else {
                     const data = await response.json();
 
@@ -96,26 +102,25 @@ export class CopilotAuthService {
                             // Wait and retry
                         } else if (data.error === 'slow_down') {
                             pollInterval += 5;
+                            log.debug('Slow down requested', { newInterval: pollInterval });
                         } else {
-                            // Fatal error (e.g., expired_token, access_denied)
+                            // Fatal error
                             throw new Error(data.error_description || data.error);
                         }
                     } else if (data.access_token) {
+                        log.info('Token received successfully');
                         return {
                             accessToken: data.access_token,
                             tokenType: data.token_type,
                             scope: data.scope,
                         };
                     } else {
-                        console.warn('[CopilotAuthService] Unexpected response format:', data);
+                        log.warn('Unexpected response format', { data });
                     }
                 }
             } catch (err: any) {
-                console.error('[CopilotAuthService] Polling error:', err.message);
-                // If it's a fatal logic error, we should probably stop.
-                // But for now we treat as retriable unless explicitly thrown above.
+                log.error('Polling error', { error: err.message });
                 if (!err.message.includes('fetch')) {
-                    // logic errors re-thrown
                     if (err.message !== 'Failed to fetch' && !err.message.includes('network')) {
                         throw err;
                     }

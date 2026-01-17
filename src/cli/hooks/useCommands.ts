@@ -1,4 +1,3 @@
-import clipboard from 'clipboardy';
 import open from 'open';
 import { storage, gemini, copilot, copilotAuth, ollama } from '../services';
 import { Provider } from './useChat';
@@ -50,27 +49,57 @@ Available Commands:
                 } else if (ctx.provider === 'copilot') {
                     ctx.setStatus('Requesting Device Code...');
                     try {
+                        log.info('Starting Copilot Auth flow');
                         const codeData = await copilotAuth.requestDeviceCode();
-                        await clipboard.write(codeData.user_code);
-                        ctx.addSystemMessage(`
-**Action Required**
-1. Copy code: ${codeData.user_code} (Copied to clipboard!)
-2. Go to: ${codeData.verification_uri}
-3. Authorizing...
-                        `);
-                        await open(codeData.verification_uri);
+                        log.info('Received codeData', codeData);
 
+                        // try {
+                        //     await clipboard.write(codeData.user_code);
+                        //     log.info('User code copied to clipboard');
+                        // } catch (err: any) {
+                        //     log.warn('Failed to copy to clipboard', { error: err.message });
+                        // }
+
+                        ctx.addSystemMessage(
+                            `
+**Copilot Auth**
+User Code: **${codeData.user_code}**
+
+Opening browser for authorization... ${codeData.verification_uri}
+`,
+                            'copilot',
+                        );
+
+                        ctx.forceUpdate();
+
+                        log.info('Triggering browser open', { uri: codeData.verification_uri });
+                        // No await on open to avoid blocking, and handle errors
+                        open(codeData.verification_uri).catch((err) => {
+                            log.error('Failed to open browser', { error: err.message });
+                            ctx.addSystemMessage(
+                                `Could not open browser automatically. Please go to: ${codeData.verification_uri}`,
+                                'copilot',
+                            );
+                        });
+
+                        log.info('Entering polling phase');
                         const tokenData = await copilotAuth.pollForToken(
                             codeData.device_code,
                             codeData.interval,
                         );
+                        log.info('Token acquired');
+
                         await copilot.initialize(tokenData.accessToken);
                         ctx.setStatus('Ready');
-                        ctx.addSystemMessage('Copilot authentication successful.');
+                        const newConv = storage.createConversation();
+                        (newConv as any).model = ctx.model;
+                        ctx.setConversation(newConv);
+                        // ctx.addSystemMessage('Copilot authentication successful.', 'copilot');
                         ctx.forceUpdate();
                     } catch (e: any) {
+                        log.error('Copilot Auth Error', { error: e.message });
                         ctx.setStatus('Auth Failed');
-                        ctx.addSystemMessage(`Copilot Auth failed: ${e.message}`);
+                        ctx.addSystemMessage(`Copilot Auth failed: ${e.message}`, 'copilot');
                     }
                 }
                 break;
@@ -104,6 +133,19 @@ Available Commands:
                         } catch {
                             // ignore
                         }
+                    } else if (args[0] === 'copilot') {
+                        defModel = 'gpt-5-mini'; // Default fallback
+                        try {
+                            // Only try to list if we might be authorized, or let it fail silently
+                            if (copilot.isConfigured()) {
+                                const models = await copilot.listModels();
+                                if (models.length > 0) {
+                                    defModel = models[0].name;
+                                }
+                            }
+                        } catch {
+                            // ignore
+                        }
                     }
 
                     ctx.setModel(defModel);
@@ -112,10 +154,6 @@ Available Commands:
                     else if (args[0] === 'copilot') copilot.setModel(defModel);
                     else if (args[0] === 'ollama') ollama.setModel(defModel);
 
-                    ctx.addSystemMessage(
-                        `Switched to **${args[0]}** (Model: ${defModel})`,
-                        args[0],
-                    );
                     ctx.forceUpdate();
                 } else {
                     ctx.addSystemMessage(

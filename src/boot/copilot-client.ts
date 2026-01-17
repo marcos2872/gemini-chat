@@ -143,6 +143,7 @@ export class CopilotClient {
         if (!this.oauthToken) return [];
 
         try {
+            log.info('Exchanging token for listModels');
             await this.exchangeToken();
         } catch (e) {
             log.warn('Token exchange failed during listModels', { error: e });
@@ -150,7 +151,7 @@ export class CopilotClient {
         }
 
         try {
-            log.debug('Fetching models');
+            log.info('Fetching models from Copilot API...');
 
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -173,30 +174,23 @@ export class CopilotClient {
             }
 
             const data = await response.json();
-
-            // Expected format: { data: [...] } or just [...]?
-            // Usually { data: [...] } for /models endpoint in OpenAI style, but Copilot might differ.
-            // Documentation says "JSON com a lista de modelos".
-            // Let's handle both.
             const models = Array.isArray(data) ? data : data.data || [];
 
             // Filter
             const validModels = models.filter((m: any) => {
-                // model_picker_enabled === true
                 if (m.model_picker_enabled !== true) return false;
-                // capabilities.type === "chat"
                 if (m.capabilities?.type !== 'chat') return false;
-                // policy.state === "enabled"
                 if (m.policy?.state !== 'enabled') return false;
                 return true;
             });
 
+            log.info('Models fetched successfully', { count: validModels.length });
             return validModels.map((m: any) => ({
                 name: m.id || m.name,
                 displayName: m.name || m.id,
             }));
         } catch (error: any) {
-            log.warn('Failed to fetch models', { error: error.message });
+            log.error('Failed to fetch models', { error: error.message });
             return [];
         }
     }
@@ -209,7 +203,15 @@ export class CopilotClient {
      * @returns {Promise<string>}
      */
     async sendPrompt(prompt: string, mcpManager: any, onApproval: any) {
-        if (!this.oauthToken) throw new Error('Not authenticated');
+        if (!this.oauthToken) {
+            log.error('sendPrompt failed: Not authenticated');
+            throw new Error('Not authenticated');
+        }
+
+        log.info('Sending prompt to Copilot', {
+            prompt: prompt.substring(0, 100) + '...',
+            model: this.modelName,
+        });
         await this.exchangeToken();
 
         this._addToHistory('user', prompt);
@@ -228,6 +230,7 @@ export class CopilotClient {
             tools = await mcpManager.getAllTools();
             if (tools && tools.length > 0) {
                 openAITools = this._mapToolsToOpenAI(tools);
+                log.debug('Tools mapped for OpenAI', { count: openAITools.length });
             }
         }
 
@@ -237,7 +240,7 @@ export class CopilotClient {
 
         while (turn < maxTurns) {
             try {
-                log.debug('Sending prompt', { model: this.modelName, turn: turn + 1 });
+                log.info('Executing chat turn', { turn: turn + 1, model: this.modelName });
                 const payload: any = {
                     messages: messages,
                     model: this.modelName,
@@ -279,6 +282,7 @@ export class CopilotClient {
                     } catch {
                         /* ignore */
                     }
+                    log.error('Chat API Error', { status: response.status, error: errorMsg });
                     throw new Error(errorMsg);
                 }
 
@@ -286,12 +290,10 @@ export class CopilotClient {
 
                 if (data && data.choices && data.choices.length > 0) {
                     const message = data.choices[0].message;
-
-                    // Add assistant message to local history (and to next request)
                     messages.push(message);
 
                     if (message.tool_calls && message.tool_calls.length > 0) {
-                        log.info('Tool calls requested', {
+                        log.info('Model requested tool calls', {
                             tools: message.tool_calls.map((t: any) => t.function.name),
                         });
 
@@ -312,7 +314,6 @@ export class CopilotClient {
                             // Execution
                             let result;
                             let approved = true;
-                            // Sort keys for stable signature to avoid duplicates on property ordering
                             const sortKeys = (obj: any): any => {
                                 if (obj === null || typeof obj !== 'object') return obj;
                                 if (Array.isArray(obj)) return obj.map(sortKeys);
@@ -325,12 +326,6 @@ export class CopilotClient {
                             };
                             const stableArgs = sortKeys(args);
                             const toolSignature = `${functionName}:${JSON.stringify(stableArgs)}`;
-
-                            // log.debug('Checking tool signature', {
-                            //     signature: toolSignature,
-                            //     deniedHasIt: deniedTools.has(toolSignature),
-                            //     deniedSize: deniedTools.size,
-                            // });
 
                             if (deniedTools.has(toolSignature)) {
                                 log.warn('Auto-denying already rejected tool', {
@@ -352,14 +347,18 @@ export class CopilotClient {
                                 result = { error: 'User denied tool execution.' };
                             } else {
                                 try {
+                                    log.info('Calling tool', { tool: functionName });
                                     result = await mcpManager.callTool(functionName, args);
-                                    log.debug('Tool executed', { tool: functionName });
+                                    log.debug('Tool result acquired', { tool: functionName });
                                 } catch (err: any) {
+                                    log.error('Tool execution error', {
+                                        tool: functionName,
+                                        error: err.message,
+                                    });
                                     result = { error: err.message };
                                 }
                             }
 
-                            // Append Tool Output
                             messages.push({
                                 role: 'tool',
                                 tool_call_id: toolCall.id,
@@ -367,26 +366,27 @@ export class CopilotClient {
                             });
                         }
                         turn++;
-                        // Loop continues to send tool outputs back to model
                     } else {
-                        // Final text response
                         if (message.content) {
+                            log.info('Response received from Copilot');
                             this._addToHistory('assistant', message.content);
                             return message.content;
                         } else {
+                            log.warn('Response contained no content');
                             throw new Error('No content in response');
                         }
                     }
                 } else {
-                    console.warn('[Copilot] Response contained no choices/messages.');
+                    log.warn('Response choices array is empty');
                     throw new Error('No content in response');
                 }
             } catch (error: any) {
-                console.error('[CopilotClient] Chat request failed:', error.message);
+                log.error('Chat request failed', { error: error.message });
                 throw error;
             }
         }
 
+        log.error('Exceeded max conversation turns');
         throw new Error('Max conversation turns reached.');
     }
 
