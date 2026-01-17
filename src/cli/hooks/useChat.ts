@@ -62,9 +62,14 @@ export const useChat = () => {
     }, [provider]);
 
     // Helpers
-    const addSystemMessage = (text: string) => {
+    const addSystemMessage = (text: string, providerOverride?: string) => {
         if (!conversation) return;
-        const sysMsg = { role: 'system', content: text, timestamp: new Date().toISOString() };
+        const sysMsg = {
+            role: 'system',
+            content: text,
+            timestamp: new Date().toISOString(),
+            provider: providerOverride || provider,
+        };
         setConversation((prev: any) => ({
             ...prev,
             messages: [...(prev.messages || []), sysMsg],

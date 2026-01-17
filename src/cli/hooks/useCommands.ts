@@ -11,7 +11,7 @@ export interface CommandContext {
     model: string;
     setModel: (m: string) => void;
     setStatus: (s: string) => void;
-    addSystemMessage: (msg: string) => void;
+    addSystemMessage: (msg: string, providerOverride?: string) => void;
     setConversation: (c: any) => void;
     conversation: any;
     forceUpdate: () => void;
@@ -112,7 +112,10 @@ Available Commands:
                     else if (args[0] === 'copilot') copilot.setModel(defModel);
                     else if (args[0] === 'ollama') ollama.setModel(defModel);
 
-                    ctx.addSystemMessage(`Switched to **${args[0]}** (Model: ${defModel})`);
+                    ctx.addSystemMessage(
+                        `Switched to **${args[0]}** (Model: ${defModel})`,
+                        args[0],
+                    );
                     ctx.forceUpdate();
                 } else {
                     ctx.addSystemMessage(
