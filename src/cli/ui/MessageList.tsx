@@ -170,10 +170,7 @@ export const MessageList = forwardRef<MessageListHandle, { messages: Message[]; 
                 width={width}
                 height={viewportHeight + 2} // +2 for padding
             >
-                <Text color="gray">
-                    [{scrollOffset}/{maxScrollOffset}] {shouldStickToBottom ? '▼' : '↕'}
-                </Text>
-                <Box flexDirection="column" width={contentWidth}>
+                <Box flexDirection="column" width={contentWidth} flexGrow={1}>
                     {visibleMessages.map((msg, index) => (
                         <MessageItem
                             key={`${msg.timestamp}-${index}`}
@@ -181,6 +178,11 @@ export const MessageList = forwardRef<MessageListHandle, { messages: Message[]; 
                             width={contentWidth}
                         />
                     ))}
+                </Box>
+                <Box justifyContent="flex-end" width={contentWidth}>
+                    <Text color="gray">
+                        [{scrollOffset}/{maxScrollOffset}] {shouldStickToBottom ? '▼' : '↕'}
+                    </Text>
                 </Box>
             </Box>
         );

@@ -96,7 +96,9 @@ export class OllamaClient {
 
             try {
                 log.info('Sending prompt to Ollama', { model: this.modelName, turn });
-                const response = await fetch(`${this.baseUrl}/api/chat`, {
+
+                // Try with tools first, fallback to no tools if model doesn't support them
+                let response = await fetch(`${this.baseUrl}/api/chat`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -106,6 +108,24 @@ export class OllamaClient {
                         tools: ollamaTools,
                     }),
                 });
+
+                // If 400 error and we sent tools, retry without tools (model doesn't support them)
+                if (response.status === 400 && ollamaTools && ollamaTools.length > 0) {
+                    log.warn('Model may not support tools, retrying without tools', {
+                        model: this.modelName,
+                    });
+                    ollamaTools = undefined; // Disable tools for this session
+
+                    response = await fetch(`${this.baseUrl}/api/chat`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            model: this.modelName,
+                            messages: messages,
+                            stream: false,
+                        }),
+                    });
+                }
 
                 if (!response.ok) {
                     log.error('Ollama API error', { status: response.status });
