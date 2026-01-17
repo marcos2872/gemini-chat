@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
 import { createLogger } from './lib/logger';
+import { Conversation, Message } from '../shared/types';
 
 const log = createLogger('Storage');
 
@@ -41,14 +42,14 @@ export class ConversationStorage {
         return crypto.randomUUID();
     }
 
-    createConversation() {
+    createConversation(): Conversation {
         const now = new Date().toISOString();
         return {
             id: this._generateId(),
             startTime: now,
             endTime: now,
-            messages: [] as any[],
-            mcpServersUsed: [] as any[],
+            messages: [],
+            mcpServersUsed: [],
         };
     }
 
@@ -57,14 +58,14 @@ export class ConversationStorage {
      * @param conversation - The conversation object to save.
      * @throws {Error} If writing to the file fails.
      */
-    async saveConversation(conversation: any) {
+    async saveConversation(conversation: Conversation) {
         try {
             await this.ensureStorageDir();
-            conversation.endTime = new Date().toISOString();
+            const updatedConv = { ...conversation, endTime: new Date().toISOString() };
 
-            const filePath = path.join(this.storagePath, `${conversation.id}.json`);
-            await fs.writeFile(filePath, JSON.stringify(conversation, null, 2));
-            log.info('Conversation saved', { id: conversation.id });
+            const filePath = path.join(this.storagePath, `${updatedConv.id}.json`);
+            await fs.writeFile(filePath, JSON.stringify(updatedConv, null, 2));
+            log.info('Conversation saved', { id: updatedConv.id });
         } catch (error) {
             const err = error as Error;
             log.error('Failed to save conversation', {
@@ -81,13 +82,14 @@ export class ConversationStorage {
      * @returns The conversation object.
      * @throws {Error} If the conversation is not found or file is unreadable.
      */
-    async loadConversation(id: string) {
+    async loadConversation(id: string): Promise<Conversation> {
         const filePath = path.join(this.storagePath, `${id}.json`);
         try {
             const content = await fs.readFile(filePath, 'utf8');
-            return JSON.parse(content);
-        } catch (err: any) {
-            if (err.code === 'ENOENT') throw new Error('Conversation not found');
+            return JSON.parse(content) as Conversation;
+        } catch (err) {
+            const error = err as NodeJS.ErrnoException;
+            if (error.code === 'ENOENT') throw new Error('Conversation not found');
             throw err;
         }
     }
@@ -96,17 +98,17 @@ export class ConversationStorage {
      * Lists all stored conversations.
      * @returns Array of conversation objects, sorted by most recent.
      */
-    async listConversations() {
+    async listConversations(): Promise<Conversation[]> {
         try {
             await this.ensureStorageDir();
             const files = await fs.readdir(this.storagePath);
-            const conversations: any[] = [];
+            const conversations: Conversation[] = [];
 
             for (const file of files) {
                 if (!file.endsWith('.json')) continue;
                 try {
                     const content = await fs.readFile(path.join(this.storagePath, file), 'utf8');
-                    const conv = JSON.parse(content);
+                    const conv = JSON.parse(content) as Conversation;
                     conversations.push(conv);
                 } catch (err) {
                     const error = err as Error;
@@ -136,12 +138,13 @@ export class ConversationStorage {
         const filePath = path.join(this.storagePath, `${id}.json`);
         try {
             await fs.unlink(filePath);
-        } catch (err: any) {
-            if (err.code !== 'ENOENT') throw err;
+        } catch (err) {
+            const error = err as NodeJS.ErrnoException;
+            if (error.code !== 'ENOENT') throw err;
         }
     }
 
-    async exportConversation(id: string, format: string) {
+    async exportConversation(id: string, format: string): Promise<string> {
         const conv = await this.loadConversation(id);
         let output = '';
 
@@ -149,7 +152,7 @@ export class ConversationStorage {
             output += `# Conversation ${conv.id}\n\n`;
             output += `**Started:** ${conv.startTime}\n\n`;
 
-            conv.messages.forEach((msg: any) => {
+            conv.messages.forEach((msg: Message) => {
                 output += `### ${msg.role.toUpperCase()}\n`;
                 output += `*${msg.timestamp}*\n\n`;
                 output += `${msg.content}\n\n`;
@@ -157,7 +160,7 @@ export class ConversationStorage {
             });
         } else {
             // txt
-            conv.messages.forEach((msg: any) => {
+            conv.messages.forEach((msg: Message) => {
                 output += `[${msg.timestamp}] ${msg.role.toUpperCase()}:\n`;
                 output += `${msg.content}\n\n`;
                 output += `----------------------------------------\n\n`;

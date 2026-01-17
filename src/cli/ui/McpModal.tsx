@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { MCPServer } from '../../boot/mcp/McpConfigService';
-import { exec } from 'child_process';
+import open from 'open';
 import * as path from 'path';
 import * as os from 'os';
 
@@ -19,21 +19,12 @@ export const McpModal = ({ servers, onToggle, onClose }: McpModalProps) => {
     // Ensure selected index is always valid
     const safeIndex = servers.length === 0 ? 0 : Math.min(selectedIndex, servers.length - 1);
 
-    const openConfigFile = () => {
-        // Try to open with the default editor
-        const command =
-            process.platform === 'darwin'
-                ? `open "${CONFIG_PATH}"`
-                : process.platform === 'win32'
-                  ? `start "" "${CONFIG_PATH}"`
-                  : `xdg-open "${CONFIG_PATH}" || ${process.env.EDITOR || 'nano'} "${CONFIG_PATH}"`;
-
-        exec(command, (error) => {
-            if (error) {
-                // Fallback: try with common editors
-                exec(`code "${CONFIG_PATH}" || nano "${CONFIG_PATH}" || vi "${CONFIG_PATH}"`);
-            }
-        });
+    const openConfigFile = async () => {
+        try {
+            await open(CONFIG_PATH);
+        } catch {
+            // Silently fail if unable to open - user can manually navigate to the file
+        }
     };
 
     useInput((input, key) => {

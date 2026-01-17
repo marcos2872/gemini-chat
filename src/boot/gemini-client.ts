@@ -1,22 +1,21 @@
 import { GoogleAuthService } from './auth/GoogleAuthService';
 import { v4 as uuidv4 } from 'uuid';
 import { OAuth2Client } from 'google-auth-library';
-import { logger } from './lib/logger';
 import { GeminiHandshakeService } from './services/gemini/GeminiHandshakeService';
 import { GeminiToolService } from './services/gemini/GeminiToolService';
 import { GeminiStreamService } from './services/gemini/GeminiStreamService';
-import { Content, Part } from './services/gemini/types';
+import { Content, Part, GeminiTool } from './services/gemini/types';
 import { GeminiListModelsService } from './services/gemini/GeminiListModelsService';
-
-const log = logger.gemini;
+import { Model, IMcpManager, ApprovalCallback } from '../shared/types';
+import { BaseClient, MAX_TOOL_TURNS } from './clients/BaseClient';
 
 // Internal API Constants
 const ENDPOINT = 'https://cloudcode-pa.googleapis.com/v1internal';
 
-export class GeminiClient {
+export class GeminiClient extends BaseClient {
     private configPath: string | undefined;
     public modelName: string;
-    private history: Content[]; // Valid Content objects
+    private geminiHistory: Content[] = [];
     private authService: GoogleAuthService;
     private client: OAuth2Client | null = null;
     private projectId: string | undefined;
@@ -28,9 +27,9 @@ export class GeminiClient {
     private listModelsService: GeminiListModelsService;
 
     constructor(configPath?: string) {
+        super('Gemini');
         this.configPath = configPath;
         this.modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-        this.history = [];
         this.authService = new GoogleAuthService();
 
         // Initialize Services
@@ -42,15 +41,16 @@ export class GeminiClient {
 
     async initialize(): Promise<boolean> {
         try {
-            log.info('Initializing Gemini client...');
+            this.log.info('Initializing Gemini client...');
             this.client = await this.authService.getAuthenticatedClient(false);
             const accessToken = await this.client.getAccessToken();
             if (!accessToken.token) throw new Error('Failed to retrieve access token');
-            log.info('Gemini client initialized successfully', { model: this.modelName });
+            this.log.info('Gemini client initialized successfully', { model: this.modelName });
             return true;
-        } catch (e: any) {
-            log.info('Gemini client initialization skipped or failed (not authenticated)', {
-                error: e.message,
+        } catch (e) {
+            const err = e as Error;
+            this.log.info('Gemini client initialization skipped or failed (not authenticated)', {
+                error: err.message,
             });
             // Silent fail expected
             return false;
@@ -64,15 +64,15 @@ export class GeminiClient {
     async setModel(model: string) {
         if (this.modelName === model) return;
         this.modelName = model;
-        log.info('Model changed', { model });
+        this.log.info('Model changed', { model });
     }
 
-    isConfigured() {
-        log.info('Checking if Gemini client is configured', !!this.client);
+    isConfigured(): boolean {
+        this.log.info('Checking if Gemini client is configured', !!this.client);
         return !!this.client;
     }
 
-    async validateConnection() {
+    async validateConnection(): Promise<boolean> {
         try {
             const client = await this.authService.getAuthenticatedClient();
             return !!client;
@@ -84,7 +84,11 @@ export class GeminiClient {
     /**
      * Main Prompt Function with Tool Loop
      */
-    async sendPrompt(prompt: string, mcpManager?: any, onApproval?: any) {
+    async sendPrompt(
+        prompt: string,
+        mcpManager?: IMcpManager,
+        onApproval?: ApprovalCallback,
+    ): Promise<string> {
         try {
             if (!this.client) await this.initialize();
             if (!this.client)
@@ -98,10 +102,10 @@ export class GeminiClient {
             const promptId = uuidv4();
 
             // Add user message to history
-            this.history.push({ role: 'user', parts: [{ text: prompt }] });
+            this.geminiHistory.push({ role: 'user', parts: [{ text: prompt }] });
 
             // Prepare Tools
-            let geminiTools: any[] | undefined = undefined;
+            let geminiTools: GeminiTool[] | undefined = undefined;
             if (mcpManager) {
                 const tools = await mcpManager.getAllTools();
                 if (tools && tools.length > 0) {
@@ -109,15 +113,16 @@ export class GeminiClient {
                 }
             }
 
-            const MAX_TURNS = 10;
             let turn = 0;
             let finalAnswer = '';
 
             // 2. Loop
-            while (turn < MAX_TURNS) {
+            while (turn < MAX_TOOL_TURNS) {
                 // Build Payload with current history (which includes previous turns)
                 // Filter out any empty contents from history to prevent INVALID_ARGUMENT
-                const validHistory = this.history.filter((h) => h.parts && h.parts.length > 0);
+                const validHistory = this.geminiHistory.filter(
+                    (h) => h.parts && h.parts.length > 0,
+                );
 
                 const payload = this.buildInternalRequestPayload(
                     {
@@ -129,14 +134,14 @@ export class GeminiClient {
                     this.projectId,
                 );
 
-                log.debug('Sending request', { turn });
+                this.log.debug('Sending request', { turn });
                 const stream = await this.sendInternalChat(this.client, payload);
 
                 // Parse Full Response
                 const responseContent = await this.streamService.consumeStream(stream);
 
                 // Add Model Response to History
-                this.history.push(responseContent);
+                this.geminiHistory.push(responseContent);
 
                 // Check for Function Calls
                 const functionCalls = responseContent.parts
@@ -144,32 +149,22 @@ export class GeminiClient {
                     .map((p) => p.functionCall!);
 
                 if (functionCalls.length > 0) {
-                    log.info('Received tool calls', { count: functionCalls.length });
+                    this.log.info('Received tool calls', { count: functionCalls.length });
 
                     for (const call of functionCalls) {
-                        let result: any;
-                        let approved = true;
+                        let result: unknown;
 
-                        // Approval
-                        if (typeof onApproval === 'function') {
-                            approved = await onApproval(call.name, call.args);
-                        }
-
-                        if (!approved) {
-                            log.warn('Tool execution rejected', { tool: call.name });
-                            result = { error: 'User denied tool execution.' };
+                        if (!mcpManager) {
+                            result = { error: 'McpManager not available' };
                         } else {
-                            // Execution
-                            try {
-                                result = await mcpManager.callTool(call.name, call.args);
-                                log.debug('Tool executed', { tool: call.name });
-                            } catch (e: any) {
-                                log.error('Tool execution failed', {
-                                    tool: call.name,
-                                    error: e.message,
-                                });
-                                result = { error: e.message };
-                            }
+                            // Use base class method for tool execution with approval
+                            const toolResult = await this.executeToolWithApproval(
+                                call.name,
+                                call.args as Record<string, unknown>,
+                                mcpManager,
+                                onApproval,
+                            );
+                            result = toolResult.result;
                         }
 
                         // Create Function Response Part
@@ -184,8 +179,8 @@ export class GeminiClient {
                         };
 
                         // Add failure/success response to history
-                        this.history.push({
-                            role: 'user', // Internal API uses 'user' (or function specific role depending on strictness, but prompt says user works)
+                        this.geminiHistory.push({
+                            role: 'user',
                             parts: [toolResponsePart],
                         });
                     }
@@ -199,27 +194,16 @@ export class GeminiClient {
             }
 
             return finalAnswer;
-        } catch (error: any) {
-            const msg = error.message || '';
-            if (msg.includes('401') || msg.includes('unauthorized')) {
-                throw new Error(
-                    '🔒 Sessão expirada ou inválida (401). Faça login novamente com /auth.',
-                );
-            }
-            if (msg.includes('403') || msg.includes('permission denied')) {
-                throw new Error('🚫 Acesso negado (403). Verifique suas permissões.');
-            }
-            if (msg.includes('429') || msg.includes('resource exhausted')) {
-                throw new Error('⏳ Muitas requisições (429). Aguarde um momento.');
-            }
-            if (msg.includes('network') || msg.includes('fetch failed')) {
-                throw new Error('📡 Erro de conexão com o Gemini. Verifique sua internet.');
-            }
-            throw error;
+        } catch (error) {
+            this.handleApiError(error as Error);
         }
     }
 
-    private buildInternalRequestPayload(req: any, userPromptId: string, projectId?: string) {
+    private buildInternalRequestPayload(
+        req: { model: string; contents: Content[]; tools?: GeminiTool[] },
+        userPromptId: string,
+        projectId?: string,
+    ) {
         return {
             model: req.model,
             project: projectId,
@@ -235,7 +219,7 @@ export class GeminiClient {
         };
     }
 
-    private async sendInternalChat(client: OAuth2Client, payload: any) {
+    private async sendInternalChat(client: OAuth2Client, payload: Record<string, unknown>) {
         const url = `${ENDPOINT}:streamGenerateContent?alt=sse`;
 
         const res = await client.request({
@@ -245,24 +229,18 @@ export class GeminiClient {
             body: JSON.stringify(payload),
             responseType: 'stream',
         });
-        return res.data as any;
+        return res.data as NodeJS.ReadableStream;
     }
 
     _addToHistory(role: string, content: string) {
-        // Legacy method for types that might still use it,
-        // but internal logic now pushes directly to this.history array with 'parts'
-        // We can adapt:
-        this.history.push({
+        this.geminiHistory.push({
             role: role === 'assistant' ? 'model' : 'user',
             parts: [{ text: content }],
         });
     }
 
-    getHistory() {
-        // Map back to UI format if needed: { role, content }
-        // Implementation depends on what the UI expects.
-        // Assuming UI expects: [{ role: 'user', content: '...' }]
-        return this.history.map((h) => ({
+    override getHistory() {
+        return this.geminiHistory.map((h) => ({
             role: h.role === 'model' ? 'assistant' : 'user',
             content: h.parts
                 .map((p) => p.text || (p.functionCall ? `Using tool: ${p.functionCall.name}` : ''))
@@ -270,19 +248,22 @@ export class GeminiClient {
         }));
     }
 
+    override clearHistory() {
+        this.geminiHistory = [];
+    }
+
     shutdown() {
         this.client = null;
         this.projectId = undefined;
-        log.info('Client shut down');
+        this.log.info('Client shut down');
     }
 
     async signOut() {
         await this.authService.signOut();
-
         this.shutdown();
     }
 
-    async listModels(): Promise<Array<{ name: string; displayName: string }>> {
+    async listModels(): Promise<Model[]> {
         return this.listModelsService.listModels();
     }
 }

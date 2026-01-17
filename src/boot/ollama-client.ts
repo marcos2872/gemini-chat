@@ -1,24 +1,43 @@
-import { logger } from './lib/logger';
 import { OllamaToolService } from './services/ollama/OllamaToolService';
-import { IMcpManager, ApprovalCallback } from '../shared/types';
+import { IMcpManager, ApprovalCallback, Model, HistoryMessage } from '../shared/types';
+import { BaseClient, MAX_TOOL_TURNS } from './clients/BaseClient';
 
-const log = logger.ollama;
+interface OllamaMessage extends HistoryMessage {
+    tool_calls?: Array<{
+        function: { name: string; arguments: Record<string, unknown> };
+    }>;
+    name?: string;
+}
 
-export class OllamaClient {
+interface OllamaApiResponse {
+    message: {
+        role: string;
+        content: string;
+        tool_calls?: Array<{
+            function: { name: string; arguments: Record<string, unknown> };
+        }>;
+    };
+}
+
+export class OllamaClient extends BaseClient {
     public modelName: string;
-    public history: any[];
+    protected override history: OllamaMessage[] = [];
     private baseUrl: string;
     private toolService: OllamaToolService;
 
     constructor() {
-        this.modelName = 'llama3'; // Default model
-        this.history = [];
+        super('Ollama');
+        this.modelName = 'llama3';
         this.baseUrl = 'http://localhost:11434';
         this.toolService = new OllamaToolService();
     }
 
     async initialize() {
         // No explicit auth needed for local Ollama
+    }
+
+    isConfigured(): boolean {
+        return true; // Local Ollama doesn't need auth
     }
 
     async validateConnection(): Promise<boolean> {
@@ -33,111 +52,110 @@ export class OllamaClient {
             clearTimeout(timeoutId);
 
             if (response.ok) {
-                log.info('Ollama connection verified');
+                this.log.info('Ollama connection verified');
             }
             return response.ok;
-        } catch (e: any) {
-            log.warn('Ollama connection check failed', { error: e.message });
+        } catch (e) {
+            const err = e as Error;
+            this.log.warn('Ollama connection check failed', { error: err.message });
             return false;
         }
     }
 
     async setModel(model: string) {
         this.modelName = model;
-        log.info('Model set', { model });
+        this.log.info('Model set', { model });
     }
 
-    async listModels(): Promise<Array<{ name: string; displayName: string }>> {
+    async listModels(): Promise<Model[]> {
         try {
-            log.info('Fetching available models');
+            this.log.info('Fetching available models');
             const response = await fetch(`${this.baseUrl}/api/tags`);
             if (!response.ok) return [];
 
-            const data: any = await response.json();
-            // data.models is the array
+            const data = (await response.json()) as { models?: Array<{ name: string }> };
 
-            return (data.models || []).map((m: any) => ({
+            return (data.models || []).map((m) => ({
                 name: m.name,
                 displayName: m.name,
             }));
-        } catch (e: any) {
-            log.error('Failed to list models', { error: e.message });
+        } catch (e) {
+            const err = e as Error;
+            this.log.error('Failed to list models', { error: err.message });
             return [];
         }
     }
 
-    // Standardize to match other clients
-    async sendPrompt(prompt: string, mcpManager?: IMcpManager, onApproval?: ApprovalCallback) {
+    async sendPrompt(
+        prompt: string,
+        mcpManager?: IMcpManager,
+        onApproval?: ApprovalCallback,
+    ): Promise<string> {
         // 1. Add user message
         this.history.push({ role: 'user', content: prompt });
 
         // 2. Prepare Tools
-        let ollamaTools: any[] | undefined = undefined;
+        let ollamaTools: unknown[] | undefined = undefined;
         if (mcpManager) {
             const tools = await mcpManager.getAllTools();
             if (tools && tools.length > 0) {
                 ollamaTools = this.toolService.mapToolsToOllama(tools);
-                log.info('Mapped MCP tools for Ollama', { count: ollamaTools.length });
+                this.log.info('Mapped MCP tools for Ollama', { count: ollamaTools.length });
             }
         }
 
-        const MAX_TURNS = 10;
         let turn = 0;
         let finalAnswer = '';
 
-        while (turn < MAX_TURNS) {
-            // Prepare messages for this turn
+        while (turn < MAX_TOOL_TURNS) {
             const messages = this.history.map((h) => ({
                 role: h.role,
                 content: h.content,
-                // Include tool_calls if present in history interactions
                 tool_calls: h.tool_calls,
             }));
 
             try {
-                log.info('Sending prompt to Ollama', { model: this.modelName, turn });
+                this.log.info('Sending prompt to Ollama', { model: this.modelName, turn });
 
-                // Try with tools first, fallback to no tools if model doesn't support them
                 let response = await fetch(`${this.baseUrl}/api/chat`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         model: this.modelName,
-                        messages: messages,
+                        messages,
                         stream: false,
                         tools: ollamaTools,
                     }),
                 });
 
-                // If 400 error and we sent tools, retry without tools (model doesn't support them)
+                // If model doesn't support tools, retry without them
                 if (response.status === 400 && ollamaTools && ollamaTools.length > 0) {
-                    log.warn('Model may not support tools, retrying without tools', {
+                    this.log.warn('Model may not support tools, retrying without tools', {
                         model: this.modelName,
                     });
-                    ollamaTools = undefined; // Disable tools for this session
+                    ollamaTools = undefined;
 
                     response = await fetch(`${this.baseUrl}/api/chat`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             model: this.modelName,
-                            messages: messages,
+                            messages,
                             stream: false,
                         }),
                     });
                 }
 
                 if (!response.ok) {
-                    log.error('Ollama API error', { status: response.status });
+                    this.log.error('Ollama API error', { status: response.status });
                     throw new Error(`Ollama API Error: ${response.statusText}`);
                 }
 
-                const data: any = await response.json();
+                const data = (await response.json()) as OllamaApiResponse;
                 const message = data.message;
                 const responseText = message?.content || '';
 
                 // Push assistant response to history
-                // Note: Ollama expects the full message object for tool use history context
                 this.history.push({
                     role: message.role,
                     content: responseText,
@@ -146,7 +164,7 @@ export class OllamaClient {
 
                 // Check for tool calls
                 if (message.tool_calls && message.tool_calls.length > 0) {
-                    log.info('Received tool calls from Ollama', {
+                    this.log.info('Received tool calls from Ollama', {
                         count: message.tool_calls.length,
                     });
 
@@ -154,78 +172,56 @@ export class OllamaClient {
                         const functionName = toolCall.function.name;
                         const args = toolCall.function.arguments;
 
-                        let result: any;
-                        let approved = true;
-
-                        // Approval logic
-                        if (typeof onApproval === 'function') {
-                            approved = await onApproval(functionName, args);
+                        if (!mcpManager) {
+                            this.history.push({
+                                role: 'tool',
+                                content: JSON.stringify({ error: 'McpManager not available' }),
+                                name: functionName,
+                            });
+                            continue;
                         }
 
-                        if (!approved) {
-                            log.warn('Tool execution rejected', { tool: functionName });
-                            result = { error: 'User denied tool execution.' };
-                        } else {
-                            // Execute Code
-                            try {
-                                if (!mcpManager) throw new Error('McpManager not available');
-                                result = await mcpManager.callTool(functionName, args);
-                                log.debug('Tool executed', { tool: functionName });
-                            } catch (e: any) {
-                                log.error('Tool execution failed', {
-                                    tool: functionName,
-                                    error: e.message,
-                                });
-                                result = { error: e.message };
-                            }
-                        }
+                        // Use base class method for tool execution with approval
+                        const { result } = await this.executeToolWithApproval(
+                            functionName,
+                            args as Record<string, unknown>,
+                            mcpManager,
+                            onApproval,
+                        );
 
-                        // Add tool result to history
                         this.history.push({
                             role: 'tool',
                             content: JSON.stringify(result),
-                            // IMPORTANT: Is this naming standard for Ollama?
-                            // Ollama mimics OpenAI: role: 'tool', tool_call_id: ...?
-                            // Ollama docs say "role": "tool", "content": "result"
-                            // But usually also needs to link back to the call?
-                            // For now assuming simplified array flow if ID not strictly enforced or handled by lib
-                            // checking local docs/examples, Ollama often just needs the sequence.
-                            // but OpenAI format usually requires tool_call_id.
-                            // Since we don't have IDs in the 'toolCall' object from Ollama sometimes (depending on version),
-                            // we will just push. If issues arise, we'll verify Ollama version support.
                             name: functionName,
                         });
                     }
 
-                    // Continue to next turn to let model interpret results
                     turn++;
                 } else {
-                    // No tools called, this is the final answer
                     finalAnswer = responseText;
-                    log.info('Received final response from Ollama', { length: finalAnswer.length });
+                    this.log.info('Received final response from Ollama', {
+                        length: finalAnswer.length,
+                    });
                     break;
                 }
-            } catch (e: any) {
-                log.error('Ollama request failed', { error: e.message });
+            } catch (e) {
+                const err = e as Error;
+                this.log.error('Ollama request failed', { error: err.message });
 
-                if (e.message.includes('fetch failed') || e.code === 'ECONNREFUSED') {
+                if (err.message.includes('fetch failed') || err.message.includes('ECONNREFUSED')) {
                     throw new Error(
                         '📡 Não foi possível conectar ao Ollama. Verifique se ele está rodando (http://localhost:11434).',
                     );
                 }
 
-                throw new Error(`Erro no Ollama: ${e.message}`);
+                throw new Error(`Erro no Ollama: ${err.message}`);
             }
         }
 
         return finalAnswer;
     }
 
-    getHistory() {
-        return this.history;
-    }
-
     reset() {
-        this.history = [];
+        this.clearHistory();
     }
 }

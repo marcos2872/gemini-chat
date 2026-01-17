@@ -2,52 +2,56 @@ import { useState, useEffect, useCallback } from 'react';
 import { storage, mcpService, gemini, copilot, ollama } from '../services';
 import { ConfigPersistence } from '../../boot/lib/config-persistence';
 import { createLogger } from '../../boot/lib/logger';
+import {
+    Provider,
+    ChatMode,
+    Model,
+    Message,
+    Conversation,
+    McpServer,
+    AppSettings,
+    ToolApprovalRequest,
+} from '../../shared/types';
 
 const log = createLogger('useChat');
 
-export type Provider = 'gemini' | 'copilot' | 'ollama';
+export type { Provider };
 
 export const SETTINGS_KEY = 'app-settings';
 
 export interface CommandContext {
     provider: Provider;
     model: string;
-    conversation: any;
+    conversation: Conversation | null;
     isProcessing: boolean;
     status: string;
-    mode: 'chat' | 'model-selector' | 'provider-selector' | 'help' | 'mcp-manager';
-    selectionModels: any[];
+    mode: ChatMode;
+    selectionModels: Model[];
     setProvider: (p: Provider) => void;
     setModel: (m: string) => void;
     setStatus: (s: string) => void;
     addSystemMessage: (msg: string, providerOverride?: string) => void;
-    setConversation: (c: any) => void;
+    setConversation: (c: Conversation | null) => void;
     forceUpdate: () => void;
-    setMode: (
-        mode: 'chat' | 'model-selector' | 'provider-selector' | 'help' | 'mcp-manager',
-    ) => void;
-    setSelectionModels: (models: any[]) => void;
+    setMode: (mode: ChatMode) => void;
+    setSelectionModels: (models: Model[]) => void;
     removeSystemMessage: (text: string, providerOverride?: string) => void;
     setIsProcessing: (isProcessing: boolean) => void;
     handleSubmit: (text: string) => void;
-    approvalRequest: { toolName: string; args: any } | null;
+    approvalRequest: Omit<ToolApprovalRequest, 'resolve'> | null;
     handleApprove: () => void;
     handleReject: () => void;
-    mcpServers: any[];
+    mcpServers: McpServer[];
     refreshMcpServers: () => Promise<void>;
     toggleMcpServer: (name: string) => Promise<void>;
 }
 
 export const useChat = (): CommandContext => {
     // State
-    const [conversation, setConversation] = useState<any>(null);
+    const [conversation, setConversation] = useState<Conversation | null>(null);
     const [status, setStatus] = useState('Initializing...');
     const [isProcessing, setIsProcessing] = useState(false);
-    const [approvalRequest, setApprovalRequest] = useState<{
-        toolName: string;
-        args: any;
-        resolve: (value: boolean) => void;
-    } | null>(null);
+    const [approvalRequest, setApprovalRequest] = useState<ToolApprovalRequest | null>(null);
     const [_, setTick] = useState(0);
 
     const [provider, setProviderState] = useState<Provider>('gemini');
@@ -63,11 +67,9 @@ export const useChat = (): CommandContext => {
     };
 
     // UI Mode
-    const [mode, setMode] = useState<
-        'chat' | 'model-selector' | 'provider-selector' | 'help' | 'mcp-manager'
-    >('chat');
-    const [selectionModels, setSelectionModels] = useState<any[]>([]);
-    const [mcpServers, setMcpServers] = useState<any[]>([]);
+    const [mode, setMode] = useState<ChatMode>('chat');
+    const [selectionModels, setSelectionModels] = useState<Model[]>([]);
+    const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
 
     // Initialization
     useEffect(() => {
@@ -76,10 +78,7 @@ export const useChat = (): CommandContext => {
             try {
                 // 1. Load settings
                 log.info('Init: Loading app settings');
-                const settings = await ConfigPersistence.load<{
-                    provider: Provider;
-                    model: string;
-                }>(SETTINGS_KEY);
+                const settings = await ConfigPersistence.load<AppSettings>(SETTINGS_KEY);
                 let initialProvider = provider;
                 let initialModel = model;
 
@@ -138,7 +137,7 @@ export const useChat = (): CommandContext => {
                 else if (initialProvider === 'ollama') ollama.setModel(initialModel);
 
                 const newConv = storage.createConversation();
-                (newConv as any).model = initialModel;
+                newConv.model = initialModel;
                 setConversation(newConv);
 
                 // Initial status check
@@ -154,9 +153,10 @@ export const useChat = (): CommandContext => {
                     setStatus('Ready');
                 }
                 log.info('Init: Initialization complete');
-            } catch (err: any) {
-                log.error('Init: Initialization failed', { error: err.message });
-                setStatus(`Error: ${err.message}`);
+            } catch (err) {
+                const error = err as Error;
+                log.error('Init: Initialization failed', { error: error.message });
+                setStatus(`Error: ${error.message}`);
             }
         };
         init();
@@ -181,30 +181,36 @@ export const useChat = (): CommandContext => {
     // Helpers
     const addSystemMessage = (text: string, providerOverride?: string) => {
         if (!conversation) return;
-        const sysMsg = {
+        const sysMsg: Message = {
             role: 'system',
             content: text,
             timestamp: new Date().toISOString(),
-            provider: providerOverride || provider,
+            provider: (providerOverride as Provider) || provider,
         };
-        setConversation((prev: any) => ({
-            ...prev,
-            messages: [...(prev.messages || []), sysMsg],
-        }));
+        setConversation((prev) => {
+            if (!prev) return prev;
+            return {
+                ...prev,
+                messages: [...prev.messages, sysMsg],
+            };
+        });
     };
 
     const removeSystemMessage = (text: string, providerOverride?: string) => {
         if (!conversation) return;
 
-        setConversation((prev: any) => ({
-            ...prev,
-            messages: prev.messages.filter(
-                (msg: any) =>
-                    msg.content !== text ||
-                    msg.role !== 'system' ||
-                    msg.provider !== (providerOverride || provider),
-            ),
-        }));
+        setConversation((prev) => {
+            if (!prev) return prev;
+            return {
+                ...prev,
+                messages: prev.messages.filter(
+                    (msg) =>
+                        msg.content !== text ||
+                        msg.role !== 'system' ||
+                        msg.provider !== (providerOverride || provider),
+                ),
+            };
+        });
     };
 
     const forceUpdate = () => setTick((t) => t + 1);
@@ -225,7 +231,10 @@ export const useChat = (): CommandContext => {
     };
 
     // Callback passed to providers
-    const onApproval = async (toolName: string, args: any): Promise<boolean> => {
+    const onApproval = async (
+        toolName: string,
+        args: Record<string, unknown>,
+    ): Promise<boolean> => {
         return new Promise((resolve) => {
             setApprovalRequest({ toolName, args, resolve });
         });
@@ -233,17 +242,17 @@ export const useChat = (): CommandContext => {
 
     // Chat Handler
     const handleSubmit = async (text: string) => {
-        if (!text.trim() || isProcessing) return;
+        if (!text.trim() || isProcessing || !conversation) return;
 
         const currentConv = conversation;
-        const userMsg = {
+        const userMsg: Message = {
             role: 'user',
             content: text,
             timestamp: new Date().toISOString(),
         };
-        const updatedConv = {
+        const updatedConv: Conversation = {
             ...currentConv,
-            messages: [...(currentConv.messages || []), userMsg],
+            messages: [...currentConv.messages, userMsg],
         };
         setConversation(updatedConv);
         setIsProcessing(true);
@@ -263,13 +272,13 @@ export const useChat = (): CommandContext => {
                 responseText = await copilot.sendPrompt(text, mcpService, onApproval);
             }
 
-            const aiMsg = {
+            const aiMsg: Message = {
                 role: 'model',
                 content: responseText,
                 timestamp: new Date().toISOString(),
                 provider: provider,
             };
-            const finalConv = {
+            const finalConv: Conversation = {
                 ...updatedConv,
                 messages: [...updatedConv.messages, aiMsg],
             };
@@ -277,9 +286,10 @@ export const useChat = (): CommandContext => {
             setConversation(finalConv);
             await storage.saveConversation(finalConv);
             setStatus('Ready');
-        } catch (err: any) {
-            setStatus(`Error: ${err.message}`);
-            addSystemMessage(`Error: ${err.message}`);
+        } catch (err) {
+            const error = err as Error;
+            setStatus(`Error: ${error.message}`);
+            addSystemMessage(`Error: ${error.message}`);
             setIsProcessing(false);
         } finally {
             setIsProcessing(false);
