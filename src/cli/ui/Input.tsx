@@ -43,6 +43,11 @@ export const Input = ({ onSubmit, isActive, placeholder }: InputProps) => {
             return;
         }
 
+        // Ignore meta keys (Alt+...) to prevent them from being typed
+        if (key.meta) {
+            return;
+        }
+
         setValue((prev) => prev + input);
     });
 

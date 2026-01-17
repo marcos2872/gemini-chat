@@ -5,17 +5,7 @@ import { createLogger } from '../../boot/lib/logger';
 const log = createLogger('CLI');
 
 export const handleHelpCommand = (ctx: CommandContext) => {
-    ctx.addSystemMessage(`
-Available Commands:
-  /auth               - Authenticate current provider
-  /provider [name]    - Switch provider (gemini, copilot, ollama)
-  /model [name]       - Set model for current provider
-  /models             - List available models
-  /clear              - Clear conversation history
-  /logs               - Open log file location
-  /logout             - Logout from current provider
-  /exit               - Exit application
-				`);
+    ctx.setMode('help');
 };
 
 export const handleLogsCommand = async (ctx: CommandContext) => {

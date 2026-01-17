@@ -15,7 +15,7 @@ export interface CommandContext {
     conversation: any;
     isProcessing: boolean;
     status: string;
-    mode: 'chat' | 'model-selector';
+    mode: 'chat' | 'model-selector' | 'provider-selector' | 'help';
     selectionModels: any[];
     setProvider: (p: Provider) => void;
     setModel: (m: string) => void;
@@ -23,7 +23,7 @@ export interface CommandContext {
     addSystemMessage: (msg: string, providerOverride?: string) => void;
     setConversation: (c: any) => void;
     forceUpdate: () => void;
-    setMode: (mode: 'chat' | 'model-selector') => void;
+    setMode: (mode: 'chat' | 'model-selector' | 'provider-selector' | 'help') => void;
     setSelectionModels: (models: any[]) => void;
     removeSystemMessage: (text: string, providerOverride?: string) => void;
     setIsProcessing: (isProcessing: boolean) => void;
@@ -50,7 +50,9 @@ export const useChat = (): CommandContext => {
     };
 
     // UI Mode
-    const [mode, setMode] = useState<'chat' | 'model-selector'>('chat');
+    const [mode, setMode] = useState<'chat' | 'model-selector' | 'provider-selector' | 'help'>(
+        'chat',
+    );
     const [selectionModels, setSelectionModels] = useState<any[]>([]);
 
     // Initialization
