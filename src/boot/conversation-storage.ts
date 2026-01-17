@@ -14,6 +14,11 @@ export class ConversationStorage {
         this.ensureStorageDir();
     }
 
+    /**
+     * Ensures that the storage directory exists.
+     * Creates the directory if it doesn't exist, handling race conditions.
+     * @throws {Error} If directory creation fails.
+     */
     async ensureStorageDir() {
         try {
             await fs.access(this.storagePath);
@@ -47,6 +52,11 @@ export class ConversationStorage {
         };
     }
 
+    /**
+     * Saves a conversation to a JSON file.
+     * @param conversation - The conversation object to save.
+     * @throws {Error} If writing to the file fails.
+     */
     async saveConversation(conversation: any) {
         try {
             await this.ensureStorageDir();
@@ -65,6 +75,12 @@ export class ConversationStorage {
         }
     }
 
+    /**
+     * Loads a conversation by its ID.
+     * @param id - The conversation UUID.
+     * @returns The conversation object.
+     * @throws {Error} If the conversation is not found or file is unreadable.
+     */
     async loadConversation(id: string) {
         const filePath = path.join(this.storagePath, `${id}.json`);
         try {
@@ -76,6 +92,10 @@ export class ConversationStorage {
         }
     }
 
+    /**
+     * Lists all stored conversations.
+     * @returns Array of conversation objects, sorted by most recent.
+     */
     async listConversations() {
         try {
             await this.ensureStorageDir();
@@ -108,6 +128,10 @@ export class ConversationStorage {
         }
     }
 
+    /**
+     * Deletes a conversation by ID.
+     * @param id - The ID of the conversation to delete.
+     */
     async deleteConversation(id: string) {
         const filePath = path.join(this.storagePath, `${id}.json`);
         try {

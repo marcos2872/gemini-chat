@@ -13,9 +13,14 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export class CopilotAuthService {
     /**
-     * Request a device code for authentication
+     * Requests a device code for GitHub OAuth authentication.
+     * This initiates the device flow by calling the GitHub API.
+     *
+     * @returns A promise that resolves to the device code response containing verification URI and user code.
+     * @throws {Error} If the HTTP request fails or the API returns an error.
+     *
      * Docs: https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow
-     * POST https://github.com/login/device/code
+     * API: POST https://github.com/login/device/code
      */
     async requestDeviceCode() {
         log.info('Requesting device code...');
@@ -65,10 +70,15 @@ export class CopilotAuthService {
     }
 
     /**
-     * Poll for the access token
-     * POST https://github.com/login/oauth/access_token
-     * @param {string} deviceCode
-     * @param {number} interval
+     * Polls the GitHub API for an access token using the device code.
+     * Continues polling until successful, timeout, or fatal error.
+     *
+     * @param deviceCode - The device code received from requestDeviceCode.
+     * @param interval - The strict polling interval in seconds.
+     * @returns Promise resolving to the authentication token data (accessToken, tokenType, scope).
+     * @throws {Error} On timeout, fatal API errors, or network failures.
+     *
+     * API: POST https://github.com/login/oauth/access_token
      */
     async pollForToken(deviceCode: string, interval: number) {
         log.info('Starting polling for token', { interval });

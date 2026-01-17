@@ -30,8 +30,10 @@ export class GoogleAuthService {
     }
 
     /**
-     * Obtém um cliente autenticado.
-     * @param autoLogin Se true, inicia fluxo de login se não houver token. Se false, lança erro.
+     * Authenticates user with Google OAuth
+     * @param autoLogin - If true, automatically opens browser for login if no token is found.
+     * @returns Authenticated OAuth2Client
+     * @throws {Error} If authentication fails or user is not logged in (and autoLogin is false).
      */
     async getAuthenticatedClient(autoLogin = false): Promise<OAuth2Client> {
         // 1. Tenta carregar tokens salvos
@@ -48,10 +50,19 @@ export class GoogleAuthService {
         throw new Error('Usuário não autenticado. Faça login.');
     }
 
+    /**
+     * Initiates the sign-in process.
+     * Shortcut for getAuthenticatedClient(true).
+     * @returns Promise resolving to the authenticated client.
+     */
     async signIn() {
         return this.getAuthenticatedClient(true);
     }
 
+    /**
+     * Signs out the current user.
+     * Clears stored tokens and client credentials.
+     */
     async signOut() {
         try {
             await ConfigPersistence.delete(CONFIG_KEY);
