@@ -28,6 +28,9 @@ export interface CommandContext {
     removeSystemMessage: (text: string, providerOverride?: string) => void;
     setIsProcessing: (isProcessing: boolean) => void;
     handleSubmit: (text: string) => void;
+    approvalRequest: { toolName: string; args: any } | null;
+    handleApprove: () => void;
+    handleReject: () => void;
 }
 
 export const useChat = (): CommandContext => {
@@ -35,6 +38,11 @@ export const useChat = (): CommandContext => {
     const [conversation, setConversation] = useState<any>(null);
     const [status, setStatus] = useState('Initializing...');
     const [isProcessing, setIsProcessing] = useState(false);
+    const [approvalRequest, setApprovalRequest] = useState<{
+        toolName: string;
+        args: any;
+        resolve: (value: boolean) => void;
+    } | null>(null);
     const [_, setTick] = useState(0);
 
     const [provider, setProviderState] = useState<Provider>('gemini');
@@ -195,6 +203,28 @@ export const useChat = (): CommandContext => {
 
     const forceUpdate = () => setTick((t) => t + 1);
 
+    // Approval Handlers
+    const handleApprove = () => {
+        if (approvalRequest) {
+            approvalRequest.resolve(true);
+            setApprovalRequest(null);
+        }
+    };
+
+    const handleReject = () => {
+        if (approvalRequest) {
+            approvalRequest.resolve(false);
+            setApprovalRequest(null);
+        }
+    };
+
+    // Callback passed to providers
+    const onApproval = async (toolName: string, args: any): Promise<boolean> => {
+        return new Promise((resolve) => {
+            setApprovalRequest({ toolName, args, resolve });
+        });
+    };
+
     // Chat Handler
     const handleSubmit = async (text: string) => {
         if (!text.trim() || isProcessing) return;
@@ -217,14 +247,14 @@ export const useChat = (): CommandContext => {
             let responseText = '';
 
             if (provider === 'gemini') {
-                responseText = await gemini.sendPrompt(text, mcpService);
+                responseText = await gemini.sendPrompt(text, mcpService, onApproval);
             } else if (provider === 'ollama') {
-                responseText = await ollama.sendPrompt(text, mcpService);
+                responseText = await ollama.sendPrompt(text, mcpService, onApproval);
             } else {
                 if (!copilot.isConfigured()) {
                     throw new Error('Copilot not authenticated. Run /auth');
                 }
-                responseText = await copilot.sendPrompt(text, mcpService, async () => true);
+                responseText = await copilot.sendPrompt(text, mcpService, onApproval);
             }
 
             const aiMsg = {
@@ -269,5 +299,8 @@ export const useChat = (): CommandContext => {
         setMode,
         selectionModels,
         setSelectionModels,
+        approvalRequest,
+        handleApprove,
+        handleReject,
     };
 };

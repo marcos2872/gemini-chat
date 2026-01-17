@@ -8,6 +8,7 @@ import { Header } from './Header';
 import { ModelSelector } from './ModelSelector';
 import { ProviderSelector, type ProviderOption } from './ProviderSelector';
 import { HelpModal } from './HelpModal';
+import { ApprovalModal } from './ApprovalModal';
 
 export const App = () => {
     const { stdout } = useStdout();
@@ -156,6 +157,15 @@ export const App = () => {
                             models={chat.selectionModels}
                             onSelect={handleModelSelect}
                             onCancel={handleModelCancel}
+                        />
+                    </Box>
+                ) : chat.approvalRequest ? (
+                    <Box padding={2} flexGrow={1} justifyContent="center" alignItems="center">
+                        <ApprovalModal
+                            toolName={chat.approvalRequest.toolName}
+                            args={chat.approvalRequest.args}
+                            onApprove={chat.handleApprove}
+                            onReject={chat.handleReject}
                         />
                     </Box>
                 ) : chat.mode === 'help' ? (
