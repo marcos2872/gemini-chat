@@ -1,4 +1,4 @@
-import { useState, forwardRef, useImperativeHandle, useMemo, useLayoutEffect } from 'react';
+import { useState, forwardRef, useImperativeHandle, useMemo, useEffect } from 'react';
 import { Box, Text, useStdout } from 'ink';
 
 export interface MessageListHandle {
@@ -87,9 +87,10 @@ export const MessageList = forwardRef<MessageListHandle, { messages: Message[]; 
         const maxScrollOffset = Math.max(0, totalContentHeight - viewportHeight);
 
         // Auto-scroll to bottom when new messages arrive
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        useLayoutEffect(() => {
+        // This pattern is intentional for chat auto-scroll behavior
+        useEffect(() => {
             if (shouldStickToBottom && maxScrollOffset !== scrollOffset) {
+                // eslint-disable-next-line react-hooks/set-state-in-effect
                 setScrollOffset(maxScrollOffset);
             }
         }, [messages.length, maxScrollOffset, shouldStickToBottom, scrollOffset]);

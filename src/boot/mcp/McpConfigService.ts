@@ -46,8 +46,45 @@ export class McpConfigService {
             });
         } catch (error: any) {
             if (error.code === 'ENOENT') {
-                const defaultConfig = { mcpServers: [] };
+                // Create default config with example MCP servers (disabled)
+                const defaultConfig = {
+                    mcpServers: [
+                        {
+                            'example-filesystem': {
+                                command: 'npx',
+                                args: [
+                                    '-y',
+                                    '@modelcontextprotocol/server-filesystem',
+                                    '/home/user/projects',
+                                ],
+                                type: 'stdio',
+                                enabled: false,
+                                _comment:
+                                    'Example: Filesystem access MCP - change path to your project folder',
+                            },
+                        },
+                        {
+                            'example-fetch': {
+                                command: 'npx',
+                                args: ['-y', '@anthropic-ai/mcp-fetch'],
+                                type: 'stdio',
+                                enabled: false,
+                                _comment: 'Example: HTTP fetch MCP for web requests',
+                            },
+                        },
+                        {
+                            'example-sse-server': {
+                                url: 'http://localhost:3001/sse',
+                                type: 'sse',
+                                token: 'your-api-token-here',
+                                enabled: false,
+                                _comment: 'Example: SSE-based MCP server',
+                            },
+                        },
+                    ],
+                };
                 await this.saveConfig(defaultConfig);
+                // Return empty array since examples are disabled
                 return [];
             }
             console.error('[MCP Config] Failed to load config:', error);

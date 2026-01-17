@@ -24,8 +24,25 @@ export class McpService {
     async connectAll() {
         const servers = await this.configService.loadServers();
         for (const server of servers) {
-            await this.connectionManager.connectToServer(server);
+            // Only connect enabled servers
+            if (server.enabled !== false) {
+                await this.connectionManager.connectToServer(server);
+            }
         }
+    }
+
+    /**
+     * Toggle a server's enabled state
+     */
+    async toggleServer(name: string) {
+        const servers = await this.configService.loadServers();
+        const server = servers.find((s) => s.name === name);
+        if (!server) {
+            throw new Error(`Server "${name}" not found.`);
+        }
+        const newEnabled = server.enabled === false; // toggle
+        await this.updateServer(name, { enabled: newEnabled });
+        log.info('Server toggled', { server: name, enabled: newEnabled });
     }
 
     async getServers() {

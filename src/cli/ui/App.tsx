@@ -9,6 +9,7 @@ import { ModelSelector } from './ModelSelector';
 import { ProviderSelector, type ProviderOption } from './ProviderSelector';
 import { HelpModal } from './HelpModal';
 import { ApprovalModal } from './ApprovalModal';
+import { McpModal } from './McpModal';
 
 export const App = () => {
     const { stdout } = useStdout();
@@ -129,6 +130,11 @@ export const App = () => {
                 // Alt + H: Help
                 await handleCommand('help', []);
             }
+            if (_input === 't') {
+                // Alt + T: Tools (MCP Manager)
+                await chat.refreshMcpServers();
+                chat.setMode('mcp-manager');
+            }
         }
     });
 
@@ -172,6 +178,14 @@ export const App = () => {
                     <Box padding={2} flexGrow={1} justifyContent="center" alignItems="center">
                         <HelpModal onClose={() => chat.setMode('chat')} />
                     </Box>
+                ) : chat.mode === 'mcp-manager' ? (
+                    <Box padding={2} flexGrow={1} justifyContent="center" alignItems="center">
+                        <McpModal
+                            servers={chat.mcpServers}
+                            onToggle={chat.toggleMcpServer}
+                            onClose={() => chat.setMode('chat')}
+                        />
+                    </Box>
                 ) : (
                     <MessageList
                         ref={messageListRef}
@@ -191,8 +205,8 @@ export const App = () => {
                 </Box>
                 <Box paddingX={1}>
                     <Text color="gray">
-                        [Alt+M]-Model [Alt+P]-Provider [Alt+A]-Auth [Alt+C]-Clear [Alt+H]-Help
-                        [Alt+Q]-Quit
+                        [Alt+M]-Model [Alt+P]-Provider [Alt+T]-Tools [Alt+A]-Auth [Alt+C]-Clear
+                        [Alt+H]-Help [Alt+Q]-Quit
                     </Text>
                 </Box>
             </Box>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { storage, mcpService, gemini, copilot, ollama } from '../services';
 import { ConfigPersistence } from '../../boot/lib/config-persistence';
 import { createLogger } from '../../boot/lib/logger';
@@ -15,7 +15,7 @@ export interface CommandContext {
     conversation: any;
     isProcessing: boolean;
     status: string;
-    mode: 'chat' | 'model-selector' | 'provider-selector' | 'help';
+    mode: 'chat' | 'model-selector' | 'provider-selector' | 'help' | 'mcp-manager';
     selectionModels: any[];
     setProvider: (p: Provider) => void;
     setModel: (m: string) => void;
@@ -23,7 +23,9 @@ export interface CommandContext {
     addSystemMessage: (msg: string, providerOverride?: string) => void;
     setConversation: (c: any) => void;
     forceUpdate: () => void;
-    setMode: (mode: 'chat' | 'model-selector' | 'provider-selector' | 'help') => void;
+    setMode: (
+        mode: 'chat' | 'model-selector' | 'provider-selector' | 'help' | 'mcp-manager',
+    ) => void;
     setSelectionModels: (models: any[]) => void;
     removeSystemMessage: (text: string, providerOverride?: string) => void;
     setIsProcessing: (isProcessing: boolean) => void;
@@ -31,6 +33,9 @@ export interface CommandContext {
     approvalRequest: { toolName: string; args: any } | null;
     handleApprove: () => void;
     handleReject: () => void;
+    mcpServers: any[];
+    refreshMcpServers: () => Promise<void>;
+    toggleMcpServer: (name: string) => Promise<void>;
 }
 
 export const useChat = (): CommandContext => {
@@ -58,10 +63,11 @@ export const useChat = (): CommandContext => {
     };
 
     // UI Mode
-    const [mode, setMode] = useState<'chat' | 'model-selector' | 'provider-selector' | 'help'>(
-        'chat',
-    );
+    const [mode, setMode] = useState<
+        'chat' | 'model-selector' | 'provider-selector' | 'help' | 'mcp-manager'
+    >('chat');
     const [selectionModels, setSelectionModels] = useState<any[]>([]);
+    const [mcpServers, setMcpServers] = useState<any[]>([]);
 
     // Initialization
     useEffect(() => {
@@ -280,6 +286,20 @@ export const useChat = (): CommandContext => {
         }
     };
 
+    // MCP Management
+    const refreshMcpServers = useCallback(async () => {
+        const servers = await mcpService.getServers();
+        setMcpServers(servers);
+    }, []);
+
+    const toggleMcpServer = useCallback(
+        async (name: string) => {
+            await mcpService.toggleServer(name);
+            await refreshMcpServers();
+        },
+        [refreshMcpServers],
+    );
+
     return {
         conversation,
         setConversation,
@@ -302,5 +322,8 @@ export const useChat = (): CommandContext => {
         approvalRequest,
         handleApprove,
         handleReject,
+        mcpServers,
+        refreshMcpServers,
+        toggleMcpServer,
     };
 };
