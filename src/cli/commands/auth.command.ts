@@ -67,7 +67,6 @@ export const handleLogoutCommand = async (ctx: CommandContext) => {
     if (ctx.provider === 'gemini') {
         try {
             await gemini.signOut();
-            ctx.addSystemMessage('Logged out from Gemini.');
             ctx.setStatus('Not Authenticated');
         } catch (e) {
             const error = e as Error;
@@ -75,7 +74,6 @@ export const handleLogoutCommand = async (ctx: CommandContext) => {
         }
     } else if (ctx.provider === 'copilot') {
         copilot.reset();
-        ctx.addSystemMessage('Logged out from Copilot.');
         ctx.setStatus('Not Authenticated');
     } else if (ctx.provider === 'ollama') {
         const { ollama } = await import('../services');
