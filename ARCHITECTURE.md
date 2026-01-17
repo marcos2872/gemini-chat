@@ -1,167 +1,133 @@
-# Arquitetura do IA-Chat
+# Arquitetura do IA-Chat (CLI)
 
-Este documento descreve a arquitetura de alto nível do aplicativo **IA-Chat** e detalha os fluxos de dados para interações com múltiplos modelos (Gemini e Copilot) e o uso do Model Context Protocol (MCP).
+Este documento descreve a arquitetura atual do **IA-Chat**, que evoluiu para uma aplicação de linha de comando (CLI) robusta e interativa, construída com **TypeScript**, **React** e **Ink**.
 
 ## Visão Geral
 
-O aplicativo é construído sobre o framework **Electron**, utilizando uma arquitetura de processos múltiplos com **TypeScript** em toda a stack:
+O projeto abandonou a arquitetura Electron anterior em favor de uma CLI leve e focada em desenvolvedores, mantendo a capacidade de interagir com múltiplos modelos (Gemini, Copilot, Ollama) e executar ferramentas complexas via **Model Context Protocol (MCP)**.
 
-- **Processo Main (Node.js)**: Gerencia o ciclo de vida da aplicação, orquestra a comunicação entre serviços (Gemini, Copilot, MCP) e mantém o estado da aplicação. Foi refatorado para utilizar o padrão **Controller-Service**.
-- **Processo Renderer (React + Vite)**: Interface do usuário moderna e responsiva. Comunica-se com o Main exclusivamente através de um **IPC Bridge** tipado.
+### Stack Tecnológica
 
-### Componentes Chave (Main Process)
-
-A arquitetura do processo Main foi modularizada para melhor escalabilidade:
-
-- **`src/boot/main.ts`**: Ponto de entrada. Inicializa serviços e injeta dependências nos controladores.
-- **`src/boot/lib/IpcRouter.ts`**: Roteador central que despacha mensagens IPC para os handlers registrados.
-- **Controladores (`src/boot/controllers/`)**:
-    - **`GeminiController`**: Gerencia interações com a API do Google Gemini.
-    - **`CopilotController`**: Gerencia autenticação OAuth (Copilot) e tokens.
-    - **`McpController`**: Gerencia configuração e testes de servidores MCP.
-- **Serviços de Domínio**:
-    - **`src/boot/gemini-client.ts`**: Cliente para o Google Generative AI SDK.
-    - **`src/boot/copilot-client.ts`**: Cliente reverso para a API interna do GitHub Copilot (Token Exchange, Chat).
-    - **`src/boot/mcp/McpService.ts`**: Serviço central para gerenciamento de conexões MCP (substitui o antigo `mcp-manager`).
-- **`src/boot/conversation-storage.ts`**: Persistência de dados local (arquivos JSON).
+- **Runtime**: Node.js
+- **UI Framework**: React + Ink (Renderização de componentes no terminal via Yoga Layout)
+- **Bundler**: esbuild (Build rápido para ESM)
+- **State Management**: React Hooks (`useChat`, `useCommands`) + Singleton Service Container
+- **Protocolos**: MCP (Model Context Protocol), OAuth 2.0 (Copilot)
 
 ---
 
-## Fluxos de Execução
+## Estrutura de Diretórios
 
-## Fluxos de Execução
+A estrutura foi simplificada e dividida entre a interface (CLI) e o núcleo lógico (Boot):
 
-### 1. Inicialização e Autenticação
+- **`src/cli/`**: Camada de Apresentação e Aplicação.
+    - `index.tsx`: Ponto de entrada. Inicializa o renderizador Ink.
+    - `ui/`: Componentes React visuais (`App`, `MessageList`, `Input`, `ApprovalModal`).
+    - `hooks/`: Lógica de estado e comandos (`useChat`, `useCommands`).
+    - `commands/`: Implementação dos comandos (`/auth`, `/model`, `/clear`).
+    - `services.ts`: **ServiceContainer** (Singleton) que injeta dependências do núcleo na UI.
+- **`src/boot/`**: Camada de Domínio e Infraestrutura (Core).
+    - `gemini-client.ts` / `copilot-client.ts` / `ollama-client.ts`: Clientes para cada LLM.
+    - `mcp/`: Implementação do servidor e cliente MCP.
+    - `services/`: Serviços auxiliares (ex: `OllamaToolService`).
+    - `conversation-storage.ts`: Persistência local de chats (JSON).
+    - `lib/`: Utilitários (Logger, IpcRouter legado).
+- **`src/shared/`**: Tipos e constantes compartilhados.
 
-Como cada provedor lida com a conexão inicial e listagem de modelos.
+---
 
-#### A. GitHub Copilot (OAuth + Token Exchange)
+## Componentes Chave
 
-Fluxo complexo que envolve autorização no navegador e troca de tokens para acesso à API interna.
+### 1. Service Container (`src/cli/services.ts`)
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Auth as CopilotController
-    participant Client as CopilotClient
-    participant GH as GitHub API
+Atua como a ponte entre a UI (React) e a lógica de negócios (Classes). Implementa um padrão Singleton com injeção de dependência preguiçosa (Lazy Loading).
 
-    Note over User, GH: Autenticação
-    User->>Auth: Solicita Login
-    Auth->>GH: Request Device Code
-    GH-->>Auth: Retorna Código + URL
-    Auth->>User: Exibe Código para colar no Browser
+```typescript
+// A UI consome os serviços globalmente via hooks ou downloads diretos
+import { services } from '../services';
 
-    loop Polling
-        Auth->>GH: Verifica status (POST /oauth/token)
-    end
-
-    GH-->>Auth: Retorna OAuth Token
-    Auth->>Client: initialize(oauthToken)
-
-    Note over Client, GH: Listagem de Modelos
-    Client->>GH: Exchange Token (OAuth -> API Token)
-    GH-->>Client: Retorna API Token + Endpoints
-    Client->>GH: GET /models (com API Token)
-    GH-->>Client: Lista de Modelos (gpt-4o, claude-3.5, etc)
-    Client-->>User: Atualiza lista na UI
+const gemini = services.gemini;
+const mcp = services.mcpService;
 ```
 
-#### B. Google Gemini (API Key)
+### 2. Clients de IA (`src/boot/*-client.ts`)
 
-Fluxo simplificado baseada em chave de API (arquivo `.env` ou Input do usuário).
+Cada provedor (Gemini, Copilot, Ollama) possui uma classe dedicada que normaliza a interface de chat:
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Controller as GeminiController
-    participant Client as GeminiClient
-    participant Google as Google AI API
+- **Gerenciamento de Histórico**: Mantém o contexto da conversa.
+- **Integração MCP**: Mapeia ferramentas disponíveis para o formato específico do modelo.
+- **Execução de Ferramentas**: Coordena a execução de tools aprovadas pelo usuário.
 
-    User->>Controller: Inicia App / Salva Chave
-    Controller->>Client: initialize(apiKey)
+### 3. Model Context Protocol (MCP)
 
-    Client->>Google: GET /models (check connection)
+O suporte a MCP é central para a capacidade de agente do CLI.
 
-    alt Sucesso
-        Google-->>Client: Lista de Modelos (gemini-1.5, etc)
-        Client-->>User: Conectado + Lista de Modelos
-    else Falha
-        Google-->>Client: Erro 403/400
-        Client-->>User: Solicita nova chave
-    end
-```
+- **`McpService`**: Identifica e carrega servidores MCP configurados.
+- **`OllamaToolService`**: Converte definições de ferramentas MCP para o formato JSON Schema suportado pelo Ollama/Llama.
+- **Loop de Execução**: O cliente detecta `tool_calls` na resposta do modelo, solicita aprovação via Callback, executa a ferramenta e devolve o resultado ao modelo.
 
-### 2. Fluxo de Chat Genérico (com MCP)
+---
 
-Tanto o Gemini quanto o Copilot compartilham a **mesma arquitetura** para processamento de chat e uso de ferramentas (MCP). O **ChatProvider** serve como uma abstração para qualquer modelo.
+## Fluxos de Dados
+
+### 1. Fluxo de Chat com Ferramentas (Ex: Ollama)
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant UI as ChatInterface
-    participant Main as MainController
-    participant Provider as ModelProvider (Gemini/Copilot)
-    participant MCP as McpService
-    participant Tool as Ferramenta (Filesystem/Browser)
-    participant API as LLM API (Google/GitHub)
+    participant UI as Ink UI (App.tsx)
+    participant Hook as useChat (Hook)
+    participant Client as OllamaClient
+    participant MCP as McpManager
+    participant Tool as Tool (Filesystem)
+    participant Model as Ollama API
 
-    User->>UI: Envia: "Analise o arquivo data.csv"
-    UI->>Main: IPC: chat-stream(msg)
-    Main->>Provider: sendPrompt(msg)
+    User->>UI: Digita: "Liste arquivos da pasta atual"
+    UI->>Hook: handleSubmit(text)
+    Hook->>Client: sendPrompt(text, mcpManager, approvalCallback)
 
-    Note over Provider, MCP: Injeção de Contexto
-    Provider->>MCP: getTools()
-    MCP-->>Provider: Definição das Tools (JSON Schema)
+    Client->>Model: POST /api/chat (com tools def)
+    Model-->>Client: Response: tool_call("ls", path=".")
 
-    Provider->>API: Envia Prompt + Definições de Tools
+    Client->>Hook: approvalCallback("ls", args)
+    Hook->>UI: setApprovalRequest(...) -> Exibe Modal
 
-    loop Loop de Execução (ReAct / Function Calling)
-        API-->>Provider: Resposta: CallTool("read_file", path="data.csv")
+    User->>UI: [Aprova]
+    UI->>Hook: handleApprove()
+    Hook-->>Client: true (Promise resolved)
 
-        Provider->>UI: Request Approval
-        UI-->>User: "Permitir leitura de data.csv?"
-        User-->>Provider: Aprovar
+    Client->>MCP: callTool("ls", args)
+    MCP->>Tool: Executa comando
+    Tool-->>MCP: Retorna lista de arquivos
+    MCP-->>Client: Resultado JSON
 
-        Provider->>MCP: callTool("read_file", args)
-        MCP->>Tool: Lê o arquivo no disco
-        Tool-->>MCP: Conteúdo do arquivo
-        MCP-->>Provider: ToolResult
+    Client->>Model: POST /api/chat (Role: tool, Content: result)
+    Model-->>Client: Response: "Os arquivos são..."
 
-        Provider->>API: Envia ToolResult de volta ao modelo
-
-        alt Modelo decide continuar
-            API-->>Provider: CallTool("analyze_data", ...)
-        else Resposta Final
-            API-->>Provider: Texto Final ("O arquivo contém...")
-        end
-    end
-
-    Provider-->>UI: Stream de Resposta Final
-    UI-->>User: Exibe resposta
+    Client-->>Hook: Retorna resposta final
+    Hook->>UI: Atualiza MessageList
 ```
 
-## Estrutura de Diretórios Atualizada
+### 2. Fluxo de Autenticação (Copilot)
 
-- `src/boot/`: Código do Processo Main (Electron/Node).
-    - `controllers/`: Lógica de orquestração IPC.
-    - `mcp/`: Implementação do Model Context Protocol.
-    - `lib/`: Utilitários (Router, etc).
-- `src/renderer/`: Código do Processo Renderer (React).
-    - `providers/`: Abstrações para diferentes modelos (Gemini/Copilot).
-    - `components/`: Componentes da UI.
-- `release/`: Artefatos de build (.AppImage, .exe).
-- `logos/`: Assets de marca.
+A CLI lida com o fluxo OAuth Device Flow diretamente no terminal.
 
-## Build e Distribuição
+1.  Usuário digita `/auth`.
+2.  `CopilotAuthService` solicita `user_code` à API do GitHub.
+3.  CLI exibe o código e copia para a área de transferência da GUI (usando `clipboardy`).
+4.  Serviço faz polling até que o usuário autorize no navegador.
+5.  Token OAuth é salvo em `app-settings.json`.
 
-O projeto utiliza `electron-builder` para gerar executáveis portáteis.
+---
 
-- **Linux**: Gera `.AppImage` (Requer `libfuse2` em distros novas).
-- **Windows**: Gera `.exe` (Pode ser cross-compiled no Linux via Wine).
+## Build e Execução
 
-Para construir:
+O projeto é compilado para um único arquivo MJS executável via Node.js.
 
 ```bash
-npm run dist
+# Build (esbuild)
+npm run build:cli
+
+# Executar
+npm run cli
 ```
