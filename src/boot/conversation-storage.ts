@@ -2,6 +2,9 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
+import { createLogger } from './lib/logger';
+
+const log = createLogger('Storage');
 
 export class ConversationStorage {
     private storagePath: string;
@@ -15,7 +18,17 @@ export class ConversationStorage {
         try {
             await fs.access(this.storagePath);
         } catch {
-            await fs.mkdir(this.storagePath, { recursive: true });
+            try {
+                await fs.mkdir(this.storagePath, { recursive: true });
+                log.info('Storage directory created', { path: this.storagePath });
+            } catch (error) {
+                const err = error as Error;
+                log.error('Failed to create storage directory', {
+                    path: this.storagePath,
+                    error: err.message,
+                });
+                throw new Error(`Cannot initialize storage: ${err.message}`);
+            }
         }
     }
 
@@ -35,13 +48,21 @@ export class ConversationStorage {
     }
 
     async saveConversation(conversation: any) {
-        await this.ensureStorageDir();
-        conversation.endTime = new Date().toISOString();
+        try {
+            await this.ensureStorageDir();
+            conversation.endTime = new Date().toISOString();
 
-        // Sort messages? assume already sorted
-
-        const filePath = path.join(this.storagePath, `${conversation.id}.json`);
-        await fs.writeFile(filePath, JSON.stringify(conversation, null, 2));
+            const filePath = path.join(this.storagePath, `${conversation.id}.json`);
+            await fs.writeFile(filePath, JSON.stringify(conversation, null, 2));
+            log.info('Conversation saved', { id: conversation.id });
+        } catch (error) {
+            const err = error as Error;
+            log.error('Failed to save conversation', {
+                id: conversation.id,
+                error: err.message,
+            });
+            throw new Error(`Failed to save conversation: ${err.message}`);
+        }
     }
 
     async loadConversation(id: string) {
@@ -56,25 +77,35 @@ export class ConversationStorage {
     }
 
     async listConversations() {
-        await this.ensureStorageDir();
-        const files = await fs.readdir(this.storagePath);
-        const conversations: any[] = [];
+        try {
+            await this.ensureStorageDir();
+            const files = await fs.readdir(this.storagePath);
+            const conversations: any[] = [];
 
-        for (const file of files) {
-            if (!file.endsWith('.json')) continue;
-            try {
-                const content = await fs.readFile(path.join(this.storagePath, file), 'utf8');
-                const conv = JSON.parse(content);
-                conversations.push(conv);
-            } catch (err) {
-                console.error(`Error reading conversation ${file}:`, err);
+            for (const file of files) {
+                if (!file.endsWith('.json')) continue;
+                try {
+                    const content = await fs.readFile(path.join(this.storagePath, file), 'utf8');
+                    const conv = JSON.parse(content);
+                    conversations.push(conv);
+                } catch (err) {
+                    const error = err as Error;
+                    log.warn('Skipping corrupted conversation file', {
+                        file,
+                        error: error.message,
+                    });
+                }
             }
-        }
 
-        // Sort by recent
-        return conversations.sort(
-            (a, b) => new Date(b.endTime).getTime() - new Date(a.endTime).getTime(),
-        );
+            // Sort by recent
+            return conversations.sort(
+                (a, b) => new Date(b.endTime).getTime() - new Date(a.endTime).getTime(),
+            );
+        } catch (error) {
+            const err = error as Error;
+            log.error('Failed to list conversations', { error: err.message });
+            throw new Error(`Failed to list conversations: ${err.message}`);
+        }
     }
 
     async deleteConversation(id: string) {
