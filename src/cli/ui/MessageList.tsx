@@ -1,15 +1,5 @@
-import React, {
-    useState,
-    useRef,
-    useEffect,
-    useCallback,
-    forwardRef,
-    useImperativeHandle,
-} from 'react';
-import { Box, Text, measureElement } from 'ink';
-import { createLogger } from '../../boot/lib/logger';
-
-const log = createLogger('MessageList');
+import { useState, forwardRef, useImperativeHandle, useMemo, useLayoutEffect } from 'react';
+import { Box, Text, useStdout } from 'ink';
 
 export interface MessageListHandle {
     scrollUp: () => void;
@@ -27,11 +17,9 @@ interface Message {
 
 interface MessageItemProps {
     message: Message;
-    index: number;
     width: number;
 }
 
-// Removed React.memo to ensure accurate re-renders
 const MessageItem = ({ message, width }: MessageItemProps) => {
     const isUser = message.role === 'user';
     const senderName = isUser
@@ -52,124 +40,144 @@ const MessageItem = ({ message, width }: MessageItemProps) => {
 
 MessageItem.displayName = 'MessageItem';
 
+// Calculate how many lines a message will take
+const calculateMessageLines = (message: Message, width: number): number => {
+    const senderLine = 1; // "You:" or "Gemini:" line
+    const contentWidth = width > 4 ? width - 4 : width; // Account for padding
+    const content = message.content || '';
+
+    // Split content by newlines first
+    const paragraphs = content.split('\n');
+    let totalLines = senderLine;
+
+    for (const paragraph of paragraphs) {
+        if (paragraph.length === 0) {
+            totalLines += 1; // Empty line
+        } else {
+            // Estimate wrapped lines
+            totalLines += Math.ceil(paragraph.length / contentWidth);
+        }
+    }
+
+    totalLines += 1; // marginBottom
+    return totalLines;
+};
+
 export const MessageList = forwardRef<MessageListHandle, { messages: Message[]; width: number }>(
     ({ messages, width }, ref) => {
-        const [scrollTop, setScrollTop] = useState(0);
-        const containerRef = useRef(null);
-        const contentRef = useRef(null);
-        const [metrics, setMetrics] = useState({ viewportHeight: 0, contentHeight: 0 });
+        const { stdout } = useStdout();
+        const [scrollOffset, setScrollOffset] = useState(0);
         const [shouldStickToBottom, setShouldStickToBottom] = useState(true);
-        // Debug metrics
-        // const { stdout } = useStdout();
-        // const dimensions = { columns: stdout?.columns || 0, rows: stdout?.rows || 0 };
 
-        const measure = useCallback(() => {
-            if (containerRef.current && contentRef.current) {
-                const viewport = measureElement(containerRef.current);
-                const content = measureElement(contentRef.current);
+        // Calculate available height for messages (total rows - header - input - footer)
+        // Header: ~2 lines, Input: 3 lines, Footer shortcuts: 1 line, Padding: 2 lines
+        const terminalHeight = stdout?.rows || 24;
+        const viewportHeight = Math.max(5, terminalHeight - 8);
 
-                log.info('Measure', {
-                    viewportH: viewport.height,
-                    contentH: content.height,
-                    scrollTop,
-                    shouldStick: shouldStickToBottom,
-                    msgCount: messages.length,
-                    width,
-                });
+        // Calculate total content height in lines
+        const contentWidth = width > 4 ? width - 4 : width;
+        const messageHeights = useMemo(() => {
+            return messages.map((msg) => calculateMessageLines(msg, contentWidth));
+        }, [messages, contentWidth]);
 
-                setMetrics({
-                    viewportHeight: viewport.height,
-                    contentHeight: content.height,
-                });
+        const totalContentHeight = useMemo(() => {
+            return messageHeights.reduce((sum, h) => sum + h, 0);
+        }, [messageHeights]);
 
-                if (shouldStickToBottom && content.height > 0) {
-                    const maxScroll = Math.max(0, content.height - viewport.height);
-                    setScrollTop(maxScroll);
+        const maxScrollOffset = Math.max(0, totalContentHeight - viewportHeight);
+
+        // Auto-scroll to bottom when new messages arrive
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        useLayoutEffect(() => {
+            if (shouldStickToBottom && maxScrollOffset !== scrollOffset) {
+                setScrollOffset(maxScrollOffset);
+            }
+        }, [messages.length, maxScrollOffset, shouldStickToBottom, scrollOffset]);
+
+        // Calculate which messages to show based on scroll offset
+        const visibleMessages = useMemo(() => {
+            if (messages.length === 0) return [];
+
+            let currentLine = 0;
+            let startIdx = 0;
+            let endIdx = messages.length;
+            let skipLines = 0;
+
+            // Find start message based on scroll offset
+            for (let i = 0; i < messages.length; i++) {
+                const msgHeight = messageHeights[i];
+                if (currentLine + msgHeight > scrollOffset) {
+                    startIdx = i;
+                    skipLines = scrollOffset - currentLine;
+                    break;
+                }
+                currentLine += msgHeight;
+            }
+
+            // Find end message based on viewport
+            currentLine = 0;
+            for (let i = startIdx; i < messages.length; i++) {
+                currentLine += messageHeights[i];
+                if (currentLine >= viewportHeight + skipLines) {
+                    endIdx = i + 1;
+                    break;
                 }
             }
-        }, [scrollTop, shouldStickToBottom, messages.length, width]); // Removed scrollTop from dep to avoid re-measure loop
 
-        // Measure on updates
-        useEffect(() => {
-            measure();
-            const timer = setTimeout(measure, 50);
-            return () => clearTimeout(timer);
-        }, [messages, measure, width]);
+            return messages.slice(startIdx, endIdx);
+        }, [messages, messageHeights, scrollOffset, viewportHeight]);
 
-        // Measure on resize handled by parent providing new width
-
-        useImperativeHandle(ref, () => ({
-            scrollUp: () => {
-                setScrollTop((prev) => {
-                    const newTop = Math.max(0, prev - 1);
-                    setShouldStickToBottom(false);
-                    return newTop;
-                });
-            },
-            scrollDown: () => {
-                setScrollTop((prev) => {
-                    const maxScroll = Math.max(0, metrics.contentHeight - metrics.viewportHeight);
-                    const newTop = Math.min(maxScroll, prev + 1);
-                    if (newTop >= maxScroll) setShouldStickToBottom(true);
-                    return newTop;
-                });
-            },
-            pageUp: () => {
-                setScrollTop((prev) => {
-                    const newTop = Math.max(0, prev - metrics.viewportHeight);
-                    setShouldStickToBottom(false);
-                    return newTop;
-                });
-            },
-            pageDown: () => {
-                setScrollTop((prev) => {
-                    const maxScroll = Math.max(0, metrics.contentHeight - metrics.viewportHeight);
-                    const newTop = Math.min(maxScroll, prev + metrics.viewportHeight);
-                    if (newTop >= maxScroll) setShouldStickToBottom(true);
-                    return newTop;
-                });
-            },
-        }));
-
-        // if (!messages || messages.length === 0) {
-        //     return (
-        //         <Box padding={1} flexGrow={1} width={width} flexDirection="column">
-        //             <Text color="gray">No messages yet. Start chatting!</Text>
-        //             <Text color="red">
-        //                 Debug: H={dimensions.rows} W={dimensions.columns}
-        //             </Text>
-        //         </Box>
-        //     );
-        // }
-
-        // Ensure we subtract padding (2) from width to avoid unmeasured wrapping
-        const contentWidth = width > 2 ? width - 2 : width;
+        useImperativeHandle(
+            ref,
+            () => ({
+                scrollUp: () => {
+                    setScrollOffset((prev) => {
+                        const newOffset = Math.max(0, prev - 1);
+                        setShouldStickToBottom(false);
+                        return newOffset;
+                    });
+                },
+                scrollDown: () => {
+                    setScrollOffset((prev) => {
+                        const newOffset = Math.min(maxScrollOffset, prev + 1);
+                        if (newOffset >= maxScrollOffset) setShouldStickToBottom(true);
+                        return newOffset;
+                    });
+                },
+                pageUp: () => {
+                    setScrollOffset((prev) => {
+                        const newOffset = Math.max(0, prev - viewportHeight);
+                        setShouldStickToBottom(false);
+                        return newOffset;
+                    });
+                },
+                pageDown: () => {
+                    setScrollOffset((prev) => {
+                        const newOffset = Math.min(maxScrollOffset, prev + viewportHeight);
+                        if (newOffset >= maxScrollOffset) setShouldStickToBottom(true);
+                        return newOffset;
+                    });
+                },
+            }),
+            [maxScrollOffset, viewportHeight],
+        );
 
         return (
             <Box
-                ref={containerRef}
                 flexDirection="column"
                 padding={1}
                 flexGrow={1}
-                overflowY="hidden"
                 width={width}
+                height={viewportHeight + 2} // +2 for padding
             >
-                {/* <Text color="yellow">
-                    DEBUG: VP={metrics.viewportHeight} CT={metrics.contentHeight} SC={scrollTop}{' '}
-                    Stick={shouldStickToBottom ? 'T' : 'F'}
-                </Text> */}
-                <Box
-                    ref={contentRef}
-                    flexDirection="column"
-                    marginTop={-scrollTop}
-                    overflow="visible"
-                    width={contentWidth}
-                >
-                    {messages.map((msg, index) => (
+                <Text color="gray" dimColor>
+                    [{scrollOffset}/{maxScrollOffset}] {shouldStickToBottom ? '▼' : '↕'}
+                </Text>
+                <Box flexDirection="column" width={contentWidth}>
+                    {visibleMessages.map((msg, index) => (
                         <MessageItem
                             key={`${msg.timestamp}-${index}`}
                             message={msg}
-                            index={index}
                             width={contentWidth}
                         />
                     ))}
