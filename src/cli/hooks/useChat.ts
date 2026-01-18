@@ -1,25 +1,31 @@
-import { useState, useEffect, useCallback } from 'react';
-import { storage, mcpService, gemini, copilot, ollama } from '../services';
-import { ConfigPersistence } from '../../boot/lib/config-persistence';
+import { useCallback } from 'react';
+import { mcpService } from '../services';
 import { createLogger } from '../../boot/lib/logger';
 import {
     Provider,
     ChatMode,
     Model,
-    Message,
     Conversation,
     McpServer,
-    AppSettings,
     ToolApprovalRequest,
 } from '../../shared/types';
+import { useChatState, ChatState, SETTINGS_KEY } from './useChatState';
+import { useInitialization } from './useInitialization';
+import { useApproval, ApprovalState } from './useApproval';
+import { useMcpManager, McpManagerState } from './useMcpManager';
+import { handleChatSubmit } from '../providers/ChatProvider';
 
 const log = createLogger('useChat');
 
+export { SETTINGS_KEY };
 export type { Provider };
 
-export const SETTINGS_KEY = 'app-settings';
-
+/**
+ * CommandContext is the interface exposed to commands and UI components.
+ * It aggregates all state and actions from sub-hooks.
+ */
 export interface CommandContext {
+    // From useChatState
     provider: Provider;
     model: string;
     conversation: Conversation | null;
@@ -37,303 +43,114 @@ export interface CommandContext {
     setSelectionModels: (models: Model[]) => void;
     removeSystemMessage: (text: string, providerOverride?: string) => void;
     setIsProcessing: (isProcessing: boolean) => void;
+
+    // Chat action
     handleSubmit: (text: string) => void;
+
+    // From useApproval
     approvalRequest: Omit<ToolApprovalRequest, 'resolve'> | null;
     handleApprove: () => void;
     handleReject: () => void;
+
+    // From useMcpManager
     mcpServers: McpServer[];
     refreshMcpServers: () => Promise<void>;
     toggleMcpServer: (name: string) => Promise<void>;
 }
 
+/**
+ * Main chat hook that composes smaller hooks.
+ * This is the primary hook used by the App component.
+ */
 export const useChat = (): CommandContext => {
-    // State
-    const [conversation, setConversation] = useState<Conversation | null>(null);
-    const [status, setStatus] = useState('Initializing...');
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [approvalRequest, setApprovalRequest] = useState<ToolApprovalRequest | null>(null);
-    const [_, setTick] = useState(0);
+    // Compose sub-hooks
+    const state: ChatState = useChatState();
+    const approval: ApprovalState = useApproval();
+    const mcpManager: McpManagerState = useMcpManager();
 
-    const [provider, setProviderState] = useState<Provider>('gemini');
-    const [model, setModelState] = useState<string>('gemini-2.5-flash');
+    // Initialize app on mount
+    useInitialization({
+        setProvider: state.setProvider,
+        setModel: state.setModel,
+        setStatus: state.setStatus,
+        setConversation: state.setConversation,
+        provider: state.provider,
+    });
 
-    // Wrappers to persist
-    const setProvider = async (p: Provider) => {
-        setProviderState(p);
-    };
+    // Chat submit handler using unified provider interface
+    const handleSubmit = useCallback(
+        async (text: string) => {
+            if (!text.trim() || state.isProcessing || !state.conversation) return;
 
-    const setModel = async (m: string) => {
-        setModelState(m);
-    };
+            state.setIsProcessing(true);
+            state.setStatus('Thinking...');
 
-    // UI Mode
-    const [mode, setMode] = useState<ChatMode>('chat');
-    const [selectionModels, setSelectionModels] = useState<Model[]>([]);
-    const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
+            // Optimistically update conversation with user message
+            const userMsg = {
+                role: 'user' as const,
+                content: text,
+                timestamp: new Date().toISOString(),
+            };
+            state.setConversation({
+                ...state.conversation,
+                messages: [...state.conversation.messages, userMsg],
+            });
 
-    // Initialization
-    useEffect(() => {
-        const init = async () => {
-            log.info('Init: Starting chat hook initialization');
             try {
-                // 1. Load settings
-                log.info('Init: Loading app settings');
-                const settings = await ConfigPersistence.load<AppSettings>(SETTINGS_KEY);
-                let initialProvider = provider;
-                let initialModel = model;
+                const { updatedConversation } = await handleChatSubmit(
+                    text,
+                    state.provider,
+                    state.conversation,
+                    mcpService,
+                    approval.onApproval,
+                );
 
-                // 2. Initialize Providers
-                log.info('Init: Initializing Gemini');
-                const geminiOk = await gemini.initialize();
-
-                log.info('Init: Initializing Copilot');
-                const copilotOk = await copilot.initialize();
-
-                log.info('Init: Initializing Ollama');
-                const ollamaOk = await ollama.validateConnection();
-
-                if (settings) {
-                    log.info('Init: Settings loaded from disk', settings);
-                    initialProvider = settings.provider;
-                    initialModel = settings.model;
-                    setProviderState(settings.provider);
-                    setModelState(settings.model);
-                } else {
-                    log.info('Init: No settings found, auto-detecting provider');
-                    if (geminiOk) {
-                        initialProvider = 'gemini';
-                        const models = await gemini.listModels();
-                        initialModel = models.length > 0 ? models[0].name : 'no models found';
-                    } else if (copilotOk) {
-                        initialProvider = 'copilot';
-                        const models = await copilot.listModels();
-                        initialModel = models.length > 0 ? models[0].name : 'no models found';
-                    } else if (ollamaOk) {
-                        initialProvider = 'ollama';
-                        const models = await ollama.listModels();
-                        initialModel = models.length > 0 ? models[0].name : 'no models found';
-                    }
-
-                    setProviderState(initialProvider);
-                    setModelState(initialModel);
-
-                    // Save initial selection
-                    await ConfigPersistence.save(SETTINGS_KEY, {
-                        provider: initialProvider,
-                        model: initialModel,
-                    });
-                }
-
-                log.info('Init: Initializing MCP');
-                await mcpService.init();
-
-                // 3. Sync model to clients
-                log.info('Init: Syncing model to clients', {
-                    provider: initialProvider,
-                    model: initialModel,
-                });
-                if (initialProvider === 'gemini') gemini.setModel(initialModel);
-                else if (initialProvider === 'copilot') copilot.setModel(initialModel);
-                else if (initialProvider === 'ollama') ollama.setModel(initialModel);
-
-                const newConv = storage.createConversation();
-                newConv.model = initialModel;
-                setConversation(newConv);
-
-                // Initial status check
-                log.info('Init: Performing initial status check');
-                if (initialProvider === 'gemini' && !gemini.isConfigured()) {
-                    setStatus('Not Authenticated');
-                } else if (initialProvider === 'copilot' && !copilot.isConfigured()) {
-                    setStatus('Not Authenticated');
-                } else if (initialProvider === 'ollama') {
-                    const connected = await ollama.validateConnection();
-                    setStatus(connected ? 'Ready' : 'Ollama Not Detected');
-                } else {
-                    setStatus('Ready');
-                }
-                log.info('Init: Initialization complete');
+                state.setConversation(updatedConversation);
+                state.setStatus('Ready');
             } catch (err) {
                 const error = err as Error;
-                log.error('Init: Initialization failed', { error: error.message });
-                setStatus(`Error: ${error.message}`);
+                log.error('Chat submit failed', { error: error.message });
+                state.setStatus(`Error: ${error.message}`);
+                state.addSystemMessage(`Error: ${error.message}`);
+            } finally {
+                state.setIsProcessing(false);
             }
-        };
-        init();
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // Provider change effect
-    useEffect(() => {
-        const checkProvider = async () => {
-            if (provider === 'gemini') {
-                setStatus(gemini.isConfigured() ? 'Ready' : 'Not Authenticated');
-            } else if (provider === 'copilot') {
-                setStatus(copilot.isConfigured() ? 'Ready' : 'Not Authenticated');
-            } else if (provider === 'ollama') {
-                setStatus('Checking Ollama...');
-                const connected = await ollama.validateConnection();
-                setStatus(connected ? 'Ready' : 'Ollama Not Detected');
-            }
-        };
-        checkProvider();
-    }, [provider]);
-
-    // Helpers
-    const addSystemMessage = (text: string, providerOverride?: string) => {
-        if (!conversation) return;
-        const sysMsg: Message = {
-            role: 'system',
-            content: text,
-            timestamp: new Date().toISOString(),
-            provider: (providerOverride as Provider) || provider,
-        };
-        setConversation((prev) => {
-            if (!prev) return prev;
-            return {
-                ...prev,
-                messages: [...prev.messages, sysMsg],
-            };
-        });
-    };
-
-    const removeSystemMessage = (text: string, providerOverride?: string) => {
-        if (!conversation) return;
-
-        setConversation((prev) => {
-            if (!prev) return prev;
-            return {
-                ...prev,
-                messages: prev.messages.filter(
-                    (msg) =>
-                        msg.content !== text ||
-                        msg.role !== 'system' ||
-                        msg.provider !== (providerOverride || provider),
-                ),
-            };
-        });
-    };
-
-    const forceUpdate = () => setTick((t) => t + 1);
-
-    // Approval Handlers
-    const handleApprove = () => {
-        if (approvalRequest) {
-            approvalRequest.resolve(true);
-            setApprovalRequest(null);
-        }
-    };
-
-    const handleReject = () => {
-        if (approvalRequest) {
-            approvalRequest.resolve(false);
-            setApprovalRequest(null);
-        }
-    };
-
-    // Callback passed to providers
-    const onApproval = async (
-        toolName: string,
-        args: Record<string, unknown>,
-    ): Promise<boolean> => {
-        return new Promise((resolve) => {
-            setApprovalRequest({ toolName, args, resolve });
-        });
-    };
-
-    // Chat Handler
-    const handleSubmit = async (text: string) => {
-        if (!text.trim() || isProcessing || !conversation) return;
-
-        const currentConv = conversation;
-        const userMsg: Message = {
-            role: 'user',
-            content: text,
-            timestamp: new Date().toISOString(),
-        };
-        const updatedConv: Conversation = {
-            ...currentConv,
-            messages: [...currentConv.messages, userMsg],
-        };
-        setConversation(updatedConv);
-        setIsProcessing(true);
-        setStatus('Thinking...');
-
-        try {
-            let responseText = '';
-
-            if (provider === 'gemini') {
-                responseText = await gemini.sendPrompt(text, mcpService, onApproval);
-            } else if (provider === 'ollama') {
-                responseText = await ollama.sendPrompt(text, mcpService, onApproval);
-            } else {
-                if (!copilot.isConfigured()) {
-                    throw new Error('Copilot not authenticated. Run /auth');
-                }
-                responseText = await copilot.sendPrompt(text, mcpService, onApproval);
-            }
-
-            const aiMsg: Message = {
-                role: 'model',
-                content: responseText,
-                timestamp: new Date().toISOString(),
-                provider: provider,
-            };
-            const finalConv: Conversation = {
-                ...updatedConv,
-                messages: [...updatedConv.messages, aiMsg],
-            };
-
-            setConversation(finalConv);
-            await storage.saveConversation(finalConv);
-            setStatus('Ready');
-        } catch (err) {
-            const error = err as Error;
-            setStatus(`Error: ${error.message}`);
-            addSystemMessage(`Error: ${error.message}`);
-            setIsProcessing(false);
-        } finally {
-            setIsProcessing(false);
-        }
-    };
-
-    // MCP Management
-    const refreshMcpServers = useCallback(async () => {
-        const servers = await mcpService.getServers();
-        setMcpServers(servers);
-    }, []);
-
-    const toggleMcpServer = useCallback(
-        async (name: string) => {
-            await mcpService.toggleServer(name);
-            await refreshMcpServers();
         },
-        [refreshMcpServers],
+        [state, approval.onApproval],
     );
 
+    // Return aggregated context
     return {
-        conversation,
-        setConversation,
-        status,
-        setStatus,
-        isProcessing,
-        setIsProcessing,
-        provider,
-        setProvider,
-        model,
-        setModel,
+        // From state
+        provider: state.provider,
+        model: state.model,
+        conversation: state.conversation,
+        isProcessing: state.isProcessing,
+        status: state.status,
+        mode: state.mode,
+        selectionModels: state.selectionModels,
+        setProvider: state.setProvider,
+        setModel: state.setModel,
+        setStatus: state.setStatus,
+        setIsProcessing: state.setIsProcessing,
+        setConversation: state.setConversation,
+        setMode: state.setMode,
+        setSelectionModels: state.setSelectionModels,
+        addSystemMessage: state.addSystemMessage,
+        removeSystemMessage: state.removeSystemMessage,
+        forceUpdate: state.forceUpdate,
+
+        // Chat action
         handleSubmit,
-        addSystemMessage,
-        removeSystemMessage,
-        forceUpdate,
-        mode,
-        setMode,
-        selectionModels,
-        setSelectionModels,
-        approvalRequest,
-        handleApprove,
-        handleReject,
-        mcpServers,
-        refreshMcpServers,
-        toggleMcpServer,
+
+        // From approval
+        approvalRequest: approval.approvalRequest,
+        handleApprove: approval.handleApprove,
+        handleReject: approval.handleReject,
+
+        // From MCP manager
+        mcpServers: mcpManager.mcpServers,
+        refreshMcpServers: mcpManager.refreshMcpServers,
+        toggleMcpServer: mcpManager.toggleMcpServer,
     };
 };

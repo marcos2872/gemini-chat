@@ -16,6 +16,15 @@ export interface Model {
 
 export type ChatMode = 'chat' | 'model-selector' | 'provider-selector' | 'help' | 'mcp-manager';
 
+/** Constants for ChatMode to avoid magic strings */
+export const CHAT_MODES = {
+    CHAT: 'chat',
+    MODEL_SELECTOR: 'model-selector',
+    PROVIDER_SELECTOR: 'provider-selector',
+    HELP: 'help',
+    MCP_MANAGER: 'mcp-manager',
+} as const satisfies Record<string, ChatMode>;
+
 // ============= Message Types =============
 
 export type MessageRole = 'user' | 'assistant' | 'system' | 'model' | 'tool';
