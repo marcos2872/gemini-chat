@@ -41,7 +41,11 @@ export const HelpModal = ({ onClose }: HelpModalProps) => {
                 </Box>
                 <Box>
                     <Text bold>Alt + C</Text>
-                    <Text> : Clear Conversation</Text>
+                    <Text> : Chats / Load Conversation</Text>
+                </Box>
+                <Box>
+                    <Text bold>Alt + N</Text>
+                    <Text> : New Conversation</Text>
                 </Box>
                 <Box>
                     <Text bold>Alt + X</Text>
@@ -67,7 +71,7 @@ export const HelpModal = ({ onClose }: HelpModalProps) => {
                     <Text bold>Alt + H</Text>
                     <Text> : Show this Help</Text>
                 </Box>
-                <Box marginTop={1}>
+                <Box>
                     <Text bold color="cyan">
                         /compress
                     </Text>

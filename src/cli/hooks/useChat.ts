@@ -37,6 +37,7 @@ export interface CommandContext {
     setModel: (m: string) => void;
     setStatus: (s: string) => void;
     addSystemMessage: (msg: string, providerOverride?: string) => void;
+    loadConversation: (conversation: Conversation) => void;
     setConversation: (c: Conversation | null) => void;
     forceUpdate: () => void;
     setMode: (mode: ChatMode) => void;
@@ -176,6 +177,14 @@ export const useChat = (): CommandContext => {
         setMode: state.setMode,
         setSelectionModels: state.setSelectionModels,
         addSystemMessage: state.addSystemMessage,
+        loadConversation: (conv: Conversation) => {
+            state.setConversation(conv);
+            // Optionally restore model if it's saved in conversation
+            if ((conv as { model?: string }).model) {
+                state.setModel((conv as { model?: string }).model!);
+            }
+            log.info('Conversation loaded', { id: conv.id });
+        },
         removeSystemMessage: state.removeSystemMessage,
         forceUpdate: state.forceUpdate,
 

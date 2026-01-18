@@ -6,6 +6,7 @@ import { useCommands } from '../hooks/useCommands';
 import { Header } from './Header';
 import { MainContent } from './MainContent';
 import { MessageListHandle } from './MessageList';
+import { HistoryModal } from './HistoryModal';
 import { ProviderOption } from './ProviderSelector';
 import { CHAT_MODES } from '../../shared/types';
 
@@ -15,6 +16,7 @@ export const App = () => {
         columns: stdout?.columns || 80,
         rows: stdout?.rows || 24,
     });
+    const [showHistory, setShowHistory] = useState(false);
 
     useEffect(() => {
         const onResize = () => {
@@ -96,7 +98,10 @@ export const App = () => {
                 await handleCommand('auth', []);
             }
             if (_input === 'c') {
-                await handleCommand('clear', []);
+                setShowHistory(true);
+            }
+            if (_input === 'n') {
+                await handleCommand('new', []);
             }
             if (_input === 'l') {
                 await handleCommand('logs', []);
@@ -125,6 +130,18 @@ export const App = () => {
 
     if (!chat.conversation) {
         return <Text color="yellow">{chat.status}</Text>;
+    }
+
+    if (showHistory) {
+        return (
+            <HistoryModal
+                onClose={() => setShowHistory(false)}
+                onSelect={(conv) => {
+                    chat.loadConversation(conv);
+                    setShowHistory(false);
+                }}
+            />
+        );
     }
 
     return (
@@ -157,7 +174,7 @@ export const App = () => {
                     <Text color="gray">
                         {chat.isProcessing
                             ? '[Alt+X]-Cancel'
-                            : '[Alt+M]-Model [Alt+P]-Provider [Alt+T]-Tools [Alt+A]-Auth [Alt+C]-Clear [Alt+H]-Help [Alt+Q]-Quit'}
+                            : '[Alt+M]-Model [Alt+P]-Provider [Alt+T]-Tools [Alt+A]-Auth [Alt+N]-New [Alt+C]-Chats [Alt+H]-Help [Alt+Q]-Quit'}
                     </Text>
                 </Box>
             </Box>

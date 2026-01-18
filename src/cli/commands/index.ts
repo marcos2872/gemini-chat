@@ -2,7 +2,7 @@ import { CommandContext } from '../hooks/useChat';
 import { handleAuthCommand, handleLogoutCommand } from './auth.command';
 import { handleProviderCommand, handleModelCommand, handleModelsCommand } from './model.command';
 import {
-    handleClearCommand,
+    handleNewCommand,
     handleCompressCommand,
     handleTokensCommand,
 } from './conversation.command';
@@ -17,7 +17,7 @@ export const commands: Record<string, CommandHandler> = {
     provider: (ctx, args) => handleProviderCommand(ctx, args),
     model: (ctx, args) => handleModelCommand(ctx, args),
     models: (ctx) => handleModelsCommand(ctx),
-    clear: (ctx) => handleClearCommand(ctx),
+    new: (ctx) => handleNewCommand(ctx),
     compress: (ctx) => handleCompressCommand(ctx),
     tokens: (ctx) => handleTokensCommand(ctx),
     logs: (ctx) => handleLogsCommand(ctx),
