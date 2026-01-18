@@ -2,7 +2,7 @@
  * RetryService - Provides retry logic with exponential backoff
  * Based on gemini-cli's retry patterns
  */
-import { createLogger } from '../../lib/logger';
+import { createLogger } from '../lib/logger';
 
 const log = createLogger('RetryService');
 

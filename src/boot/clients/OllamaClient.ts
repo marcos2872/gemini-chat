@@ -1,7 +1,7 @@
-import { OllamaToolService } from './services/ollama/OllamaToolService';
-import { IMcpManager, ApprovalCallback, Model, Message } from '../shared/types';
-import { BaseClient, MAX_TOOL_TURNS, SendPromptResult } from './clients/BaseClient';
-import { HistoryConverter, OpenAIMessage } from './services/HistoryConverter';
+import { OllamaToolService } from '../services/ollama/OllamaToolService';
+import { IMcpManager, ApprovalCallback, Model, Message } from '../../shared/types';
+import { BaseClient, MAX_TOOL_TURNS, SendPromptResult } from './BaseClient';
+import { HistoryConverter, OpenAIMessage } from '../services/HistoryConverter';
 
 interface OllamaApiResponse {
     message: {

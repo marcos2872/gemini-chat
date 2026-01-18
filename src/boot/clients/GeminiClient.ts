@@ -1,16 +1,16 @@
-import { GoogleAuthService } from './auth/GoogleAuthService';
+import { GoogleAuthService } from '../auth/GoogleAuthService';
 import { v4 as uuidv4 } from 'uuid';
 import { OAuth2Client } from 'google-auth-library';
-import { GeminiHandshakeService } from './services/gemini/GeminiHandshakeService';
-import { GeminiToolService } from './services/gemini/GeminiToolService';
-import { GeminiStreamService, StreamOptions } from './services/gemini/GeminiStreamService';
-import { Content, Part, GeminiTool } from './services/gemini/types';
-import { GeminiListModelsService } from './services/gemini/GeminiListModelsService';
-import { Model, IMcpManager, ApprovalCallback, Message } from '../shared/types';
-import { BaseClient, MAX_TOOL_TURNS, SendPromptResult } from './clients/BaseClient';
-import { retryService, RetryOptions } from './services/gemini/RetryService';
-import { HistoryConverter } from './services/HistoryConverter';
-import { unifiedCompressionService } from './services/UnifiedCompressionService';
+import { GeminiHandshakeService } from '../services/gemini/GeminiHandshakeService';
+import { GeminiToolService } from '../services/gemini/GeminiToolService';
+import { GeminiStreamService, StreamOptions } from '../services/gemini/GeminiStreamService';
+import { Content, Part, GeminiTool } from '../services/gemini/types';
+import { GeminiListModelsService } from '../services/gemini/GeminiListModelsService';
+import { Model, IMcpManager, ApprovalCallback, Message } from '../../shared/types';
+import { BaseClient, MAX_TOOL_TURNS, SendPromptResult } from './BaseClient';
+import { retryService, RetryOptions } from '../services/RetryService';
+import { HistoryConverter } from '../services/HistoryConverter';
+import { unifiedCompressionService } from '../services/UnifiedCompressionService';
 
 // Internal API Constants
 const ENDPOINT = 'https://cloudcode-pa.googleapis.com/v1internal';

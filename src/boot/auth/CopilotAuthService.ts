@@ -1,5 +1,5 @@
-import { logger } from './lib/logger';
-import { AUTH_CONFIG } from '../shared/constants';
+import { logger } from '../lib/logger';
+import { AUTH_CONFIG } from '../../shared/constants';
 const log = logger.copilot;
 
 const GITHUB_DEVICE_CODE_URL = 'https://github.com/login/device/code';

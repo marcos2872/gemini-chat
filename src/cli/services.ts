@@ -1,9 +1,9 @@
 // Shared services for CLI hooks - using Dependency Injection for testability
-import { GeminiClient } from '../boot/gemini-client';
-import { CopilotClient } from '../boot/copilot-client';
-import { CopilotAuthService } from '../boot/copilot-auth-service';
-import { OllamaClient } from '../boot/ollama-client';
-import { ConversationStorage } from '../boot/conversation-storage';
+import { GeminiClient } from '../boot/clients/GeminiClient';
+import { CopilotClient } from '../boot/clients/CopilotClient';
+import { CopilotAuthService } from '../boot/auth/CopilotAuthService';
+import { OllamaClient } from '../boot/clients/OllamaClient';
+import { ConversationStorage } from '../boot/services/ConversationStorageService';
 import { McpService } from '../boot/mcp/McpService';
 
 /**

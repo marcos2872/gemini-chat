@@ -2,8 +2,8 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
-import { createLogger } from './lib/logger';
-import { Conversation, Message } from '../shared/types';
+import { createLogger } from '../lib/logger';
+import { Conversation, Message } from '../../shared/types';
 
 const log = createLogger('Storage');
 
