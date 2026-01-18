@@ -15,10 +15,11 @@ export const HelpModal = ({ onClose }: HelpModalProps) => {
     return (
         <Box
             flexDirection="column"
-            padding={1}
+            paddingX={1}
+            paddingY={0}
             borderColor="green"
             borderStyle="single"
-            minWidth={60}
+            minWidth={70}
         >
             <Box marginBottom={1} justifyContent="center" width="100%">
                 <Text bold underline color="green">
@@ -26,62 +27,80 @@ export const HelpModal = ({ onClose }: HelpModalProps) => {
                 </Text>
             </Box>
 
-            <Box flexDirection="column" gap={1}>
-                <Box>
-                    <Text bold>Alt + P</Text>
-                    <Text> : Switch Provider (Gemini / Copilot / Ollama)</Text>
-                </Box>
-                <Box>
-                    <Text bold>Alt + M</Text>
-                    <Text> : Select Model</Text>
-                </Box>
-                <Box>
-                    <Text bold>Alt + T</Text>
-                    <Text> : Toggle MCP Tools</Text>
-                </Box>
-                <Box>
-                    <Text bold>Alt + C</Text>
-                    <Text> : Chats / Load Conversation</Text>
-                </Box>
-                <Box>
-                    <Text bold>Alt + N</Text>
-                    <Text> : New Conversation</Text>
-                </Box>
-                <Box>
-                    <Text bold>Alt + X</Text>
-                    <Text> : Cancel current request</Text>
-                </Box>
-                <Box>
-                    <Text bold>Alt + A</Text>
-                    <Text> : Authenticate current provider</Text>
-                </Box>
-                <Box>
-                    <Text bold>Alt + L</Text>
-                    <Text> : Open Logs</Text>
-                </Box>
-                <Box>
-                    <Text bold>Alt + O</Text>
-                    <Text> : Logout</Text>
-                </Box>
-                <Box>
-                    <Text bold>Alt + Q</Text>
-                    <Text> : Quit Application</Text>
-                </Box>
-                <Box>
-                    <Text bold>Alt + H</Text>
-                    <Text> : Show this Help</Text>
-                </Box>
-                <Box>
-                    <Text bold color="cyan">
-                        /compress
+            <Box flexDirection="row" gap={4}>
+                {/* Column 1: Chat & Navigation */}
+                <Box flexDirection="column" gap={0}>
+                    <Text bold color="white" underline>
+                        Chat Management
                     </Text>
-                    <Text> : Compress chat history</Text>
-                </Box>
-                <Box>
-                    <Text bold color="cyan">
-                        /tokens
+                    <Box marginY={0.5} flexDirection="column">
+                        <Text>
+                            <Text bold>Alt+N</Text> : New Conversation
+                        </Text>
+                        <Text>
+                            <Text bold>Alt+C</Text> : Chats / Load
+                        </Text>
+                        <Text>
+                            <Text bold>Alt+X</Text> : Cancel Request
+                        </Text>
+                        <Text>
+                            <Text bold>Alt+T</Text> : Toggle Tools
+                        </Text>
+                    </Box>
+
+                    <Text bold color="white" underline>
+                        Navigation
                     </Text>
-                    <Text> : Show token estimate</Text>
+                    <Box marginY={0.5} flexDirection="column">
+                        <Text>
+                            <Text bold>Alt+P</Text> : Switch Provider
+                        </Text>
+                        <Text>
+                            <Text bold>Alt+M</Text> : Select Model
+                        </Text>
+                        <Text>
+                            <Text bold>Alt+A</Text> : Authenticate
+                        </Text>
+                    </Box>
+                </Box>
+
+                {/* Column 2: System & Commands */}
+                <Box flexDirection="column" gap={0}>
+                    <Text bold color="white" underline>
+                        System
+                    </Text>
+                    <Box marginY={0.5} flexDirection="column">
+                        <Text>
+                            <Text bold>Alt+L</Text> : Open Logs
+                        </Text>
+                        <Text>
+                            <Text bold>Alt+O</Text> : Logout
+                        </Text>
+                        <Text>
+                            <Text bold>Alt+Q</Text> : Quit App
+                        </Text>
+                        <Text>
+                            <Text bold>Alt+H</Text> : Help
+                        </Text>
+                    </Box>
+
+                    <Text bold color="white" underline>
+                        Slash Commands
+                    </Text>
+                    <Box marginY={0.5} flexDirection="column">
+                        <Text>
+                            <Text bold color="cyan">
+                                /compress
+                            </Text>{' '}
+                            : Compress History
+                        </Text>
+                        <Text>
+                            <Text bold color="cyan">
+                                /tokens
+                            </Text>{' '}
+                            : Token Estimate
+                        </Text>
+                    </Box>
                 </Box>
             </Box>
 
