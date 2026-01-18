@@ -71,13 +71,13 @@ export const HelpModal = ({ onClose }: HelpModalProps) => {
                     <Text bold color="cyan">
                         /compress
                     </Text>
-                    <Text> : Compress chat history (Gemini)</Text>
+                    <Text> : Compress chat history</Text>
                 </Box>
                 <Box>
                     <Text bold color="cyan">
                         /tokens
                     </Text>
-                    <Text> : Show token estimate (Gemini)</Text>
+                    <Text> : Show token estimate</Text>
                 </Box>
             </Box>
 
