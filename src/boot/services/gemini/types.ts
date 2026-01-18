@@ -14,7 +14,7 @@ export interface Part {
 }
 
 export interface Content {
-    role: string;
+    role: 'user' | 'model';
     parts: Part[];
 }
 
