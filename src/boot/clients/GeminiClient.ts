@@ -181,7 +181,27 @@ export class GeminiClient extends BaseClient {
                 if (functionCalls.length > 0) {
                     this.log.info('Received tool calls', { count: functionCalls.length });
 
-                    for (const call of functionCalls) {
+                    // Add assistant message with tool_calls to history
+                    toolMessages.push({
+                        role: 'assistant',
+                        content: responseContent.content.parts
+                            .filter((p) => p.text)
+                            .map((p) => p.text)
+                            .join(''),
+                        timestamp: new Date().toISOString(),
+                        tool_calls: functionCalls.map((fc, idx) => ({
+                            id: `call_${fc.name}_${idx}`,
+                            function: {
+                                name: fc.name,
+                                arguments: fc.args,
+                            },
+                        })),
+                    });
+
+                    for (let i = 0; i < functionCalls.length; i++) {
+                        const call = functionCalls[i];
+                        const toolCallId = `call_${call.name}_${i}`;
+
                         if (signal?.aborted) {
                             throw new Error('Operation aborted');
                         }
@@ -228,6 +248,7 @@ export class GeminiClient extends BaseClient {
                                     output: result,
                                     duration: 0,
                                     error: false,
+                                    toolCallId: toolCallId,
                                 },
                             ],
                         });

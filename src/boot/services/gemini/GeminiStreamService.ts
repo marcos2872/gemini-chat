@@ -75,6 +75,9 @@ export class GeminiStreamService {
             throw new Error('Operation aborted');
         }
 
+        // Buffer for incomplete lines across chunks
+        let lineBuffer = '';
+
         if ('on' in stream && typeof stream.on === 'function') {
             await new Promise<void>((resolve, reject) => {
                 // Handle abort signal
@@ -90,11 +93,18 @@ export class GeminiStreamService {
 
                 stream.on('data', (d: Buffer | string) => {
                     if (signal?.aborted) return;
-                    this.parseChunkLines(d).forEach(processJson);
+                    const { results, remaining } = this.parseChunkLines(lineBuffer + d.toString());
+                    lineBuffer = remaining;
+                    results.forEach(processJson);
                 });
 
                 stream.on('end', () => {
                     signal?.removeEventListener('abort', abortHandler);
+                    // Try to parse any remaining buffer
+                    if (lineBuffer.trim()) {
+                        const { results } = this.parseChunkLines(lineBuffer);
+                        results.forEach(processJson);
+                    }
                     resolve();
                 });
 
@@ -108,7 +118,14 @@ export class GeminiStreamService {
                 if (signal?.aborted) {
                     throw new Error('Operation aborted');
                 }
-                this.parseChunkLines(chunk).forEach(processJson);
+                const { results, remaining } = this.parseChunkLines(lineBuffer + chunk.toString());
+                lineBuffer = remaining;
+                results.forEach(processJson);
+            }
+            // Process any remaining buffer
+            if (lineBuffer.trim()) {
+                const { results } = this.parseChunkLines(lineBuffer);
+                results.forEach(processJson);
             }
         }
 
@@ -141,24 +158,30 @@ export class GeminiStreamService {
         return result.content;
     }
 
-    private parseChunkLines(chunk: Buffer | string): Array<Record<string, unknown>> {
-        const str = chunk.toString();
+    private parseChunkLines(data: string): {
+        results: Array<Record<string, unknown>>;
+        remaining: string;
+    } {
         const results: Array<Record<string, unknown>> = [];
-        const lines = str.split('\n');
+        const lines = data.split('\n');
+
+        // Keep the last line as remaining (might be incomplete)
+        const remaining = lines.pop() || '';
 
         for (const line of lines) {
             if (line.startsWith('data: ')) {
                 const jsonStr = line.slice(6).trim();
                 if (jsonStr === '[DONE]') continue;
+                if (!jsonStr) continue;
                 try {
                     const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
                     results.push(parsed);
                 } catch {
-                    log.warn('[Gemini] Failed to parse JSON chunk:', jsonStr);
+                    log.warn('[Gemini] Failed to parse JSON chunk:', jsonStr.substring(0, 200));
                 }
             }
         }
-        return results;
+        return { results, remaining };
     }
 }
 

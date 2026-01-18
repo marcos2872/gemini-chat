@@ -9,7 +9,10 @@ import { retryService } from '../services/RetryService';
 import { CopilotTokenManager } from '../services/copilot/CopilotTokenManager';
 import { CopilotModelService } from '../services/copilot/CopilotModelService';
 import { CopilotToolService } from '../services/copilot/CopilotToolService';
-import { responseValidator } from '../services/copilot/ResponseValidator';
+import {
+    CopilotStreamService,
+    CopilotStreamOptions,
+} from '../services/copilot/CopilotStreamService';
 
 const DEFAULT_HEADERS = {
     Accept: 'application/json',
@@ -26,16 +29,18 @@ export class CopilotClient extends BaseClient {
     private tokenManager: CopilotTokenManager;
     private modelService: CopilotModelService;
     private toolService: CopilotToolService;
+    private streamService: CopilotStreamService;
 
     constructor() {
         super('Copilot');
         this.modelName = 'gpt-4o-mini';
-        this.timeoutMs = 30000;
+        this.timeoutMs = 60000; // Increased for streaming
 
         // Initialize Services
         this.tokenManager = new CopilotTokenManager();
         this.modelService = new CopilotModelService(this.tokenManager);
         this.toolService = new CopilotToolService();
+        this.streamService = new CopilotStreamService();
     }
 
     async initialize(oauthToken?: string): Promise<boolean> {
@@ -74,9 +79,14 @@ export class CopilotClient extends BaseClient {
         history: Message[],
         mcpManager?: IMcpManager,
         onApproval?: ApprovalCallback,
-        _signal?: AbortSignal,
-        _onChunk?: (chunk: string) => void,
+        signal?: AbortSignal,
+        onChunk?: (chunk: string) => void,
     ): Promise<SendPromptResult> {
+        // Check abort before starting
+        if (signal?.aborted) {
+            throw new Error('Operation aborted');
+        }
+
         if (!this.tokenManager.getOAuthToken()) {
             this.log.error('sendPrompt failed: Not authenticated');
             throw new Error('🔐 Você não está autenticado. Use o comando /auth para fazer login.');
@@ -107,13 +117,19 @@ export class CopilotClient extends BaseClient {
         let turn = 0;
 
         while (turn < MAX_TOOL_TURNS) {
+            // Check abort at each turn
+            if (signal?.aborted) {
+                throw new Error('Operation aborted');
+            }
+
             try {
                 this.log.info('Executing chat turn', { turn: turn + 1, model: this.modelName });
 
+                // Enable streaming for better UX
                 const payload: Record<string, unknown> = {
                     messages: messages,
                     model: this.modelName,
-                    stream: false,
+                    stream: true,
                 };
 
                 if (openAITools.length > 0) {
@@ -121,28 +137,58 @@ export class CopilotClient extends BaseClient {
                     payload.tool_choice = 'auto';
                 }
 
-                const response = await retryService.withRetry(async () => {
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+                const response = await retryService.withRetry(
+                    async () => {
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
-                    const res = await fetch(`${this.tokenManager.apiEndpoint}/chat/completions`, {
-                        method: 'POST',
-                        headers: {
-                            ...DEFAULT_HEADERS,
-                            Authorization: `Bearer ${apiToken}`,
-                            'Content-Type': 'application/json',
-                            'Copilot-Integration-Id': 'vscode-chat',
-                        },
-                        body: JSON.stringify(payload),
-                        signal: controller.signal,
-                    });
+                        // Link to user's signal if provided
+                        const handleAbort = () => controller.abort();
+                        signal?.addEventListener('abort', handleAbort);
 
-                    clearTimeout(timeoutId);
-                    return res;
-                });
+                        try {
+                            const res = await fetch(
+                                `${this.tokenManager.apiEndpoint}/chat/completions`,
+                                {
+                                    method: 'POST',
+                                    headers: {
+                                        ...DEFAULT_HEADERS,
+                                        Authorization: `Bearer ${apiToken}`,
+                                        'Content-Type': 'application/json',
+                                        'Copilot-Integration-Id': 'vscode-chat',
+                                    },
+                                    body: JSON.stringify(payload),
+                                    signal: controller.signal,
+                                },
+                            );
 
-                const data = await response.json();
-                const message = responseValidator.validateResponse(response, data);
+                            clearTimeout(timeoutId);
+                            return res;
+                        } finally {
+                            signal?.removeEventListener('abort', handleAbort);
+                            clearTimeout(timeoutId);
+                        }
+                    },
+                    { signal },
+                );
+
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(`Copilot API error: ${response.status} - ${text}`);
+                }
+
+                // Use streaming service to consume SSE
+                const streamOptions: CopilotStreamOptions = {
+                    signal,
+                    // Only stream to UI on first turn (initial response)
+                    onChunk: turn === 0 ? onChunk : undefined,
+                };
+
+                const streamResult = await this.streamService.consumeStream(
+                    response,
+                    streamOptions,
+                );
+                const message = streamResult.message;
 
                 messages.push(message);
 
@@ -151,6 +197,20 @@ export class CopilotClient extends BaseClient {
                         tools: message.tool_calls.map(
                             (t: { function: { name: string } }) => t.function.name,
                         ),
+                    });
+
+                    // Add assistant message with tool_calls to history
+                    toolMessages.push({
+                        role: 'assistant',
+                        content: message.content || '',
+                        timestamp: new Date().toISOString(),
+                        tool_calls: message.tool_calls.map((tc) => ({
+                            id: tc.id,
+                            function: {
+                                name: tc.function.name,
+                                arguments: tc.function.arguments,
+                            },
+                        })),
                     });
 
                     for (const toolCall of message.tool_calls) {
@@ -191,6 +251,7 @@ export class CopilotClient extends BaseClient {
                                     output: result,
                                     duration: 0,
                                     error: false,
+                                    toolCallId: toolCall.id,
                                 },
                             ],
                         });
@@ -199,14 +260,17 @@ export class CopilotClient extends BaseClient {
                 } else {
                     this.log.info('Response received from Copilot');
                     return {
-                        response: message.content,
+                        response: message.content || '',
                         toolMessages: toolMessages.length > 0 ? toolMessages : undefined,
                     };
                 }
             } catch (error) {
+                if ((error as Error).message === 'Operation aborted') {
+                    throw error;
+                }
                 const err = error as Error;
                 this.log.error('Chat request failed', { error: err.message });
-                throw error;
+                this.handleApiError(err);
             }
         }
 

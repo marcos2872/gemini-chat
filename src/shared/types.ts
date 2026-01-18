@@ -56,6 +56,8 @@ export interface McpToolCall {
     output: unknown;
     duration: number;
     error: boolean;
+    /** Tool call ID for linking with assistant's tool_calls (OpenAI format) */
+    toolCallId?: string;
 }
 
 /** OpenAI-style tool call */

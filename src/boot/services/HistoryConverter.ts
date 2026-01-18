@@ -81,20 +81,34 @@ export class HistoryConverter {
 
     /**
      * Convert CLI Message[] to OpenAI format (for Copilot/Ollama)
+     * Properly links tool_calls with their tool responses via tool_call_id
      */
     static toOpenAIFormat(messages: Message[]): OpenAIMessage[] {
         const result: OpenAIMessage[] = [];
 
         for (const msg of messages) {
+            // Handle tool responses - need to link with tool_call_id
+            if (msg.role === 'tool' && msg.mcpCalls && msg.mcpCalls.length > 0) {
+                for (const call of msg.mcpCalls) {
+                    result.push({
+                        role: 'tool',
+                        content: JSON.stringify(call.output),
+                        tool_call_id: call.toolCallId || `call_${call.toolName}`,
+                        name: call.toolName,
+                    });
+                }
+                continue;
+            }
+
             const openAIMsg: OpenAIMessage = {
                 role: this.mapRoleToOpenAI(msg.role),
-                content: msg.content,
+                content: msg.content || '',
             };
 
             // Handle tool calls from assistant
             if (msg.tool_calls && msg.tool_calls.length > 0) {
                 openAIMsg.tool_calls = msg.tool_calls.map((tc, idx) => ({
-                    id: tc.id || `call_${idx}`,
+                    id: tc.id || `call_${tc.function.name}_${idx}`,
                     function: {
                         name: tc.function.name,
                         arguments:
@@ -103,19 +117,6 @@ export class HistoryConverter {
                                 : JSON.stringify(tc.function.arguments),
                     },
                 }));
-            }
-
-            // Handle tool responses
-            if (msg.role === 'tool' && msg.mcpCalls && msg.mcpCalls.length > 0) {
-                // Create separate message for each tool response
-                for (const call of msg.mcpCalls) {
-                    result.push({
-                        role: 'tool',
-                        content: JSON.stringify(call.output),
-                        name: call.toolName,
-                    });
-                }
-                continue; // Skip adding the original message
             }
 
             result.push(openAIMsg);

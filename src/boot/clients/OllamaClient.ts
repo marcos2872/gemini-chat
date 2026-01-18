@@ -1,28 +1,21 @@
 import { OllamaToolService } from '../services/ollama/OllamaToolService';
+import { OllamaStreamService, OllamaStreamOptions } from '../services/ollama/OllamaStreamService';
 import { IMcpManager, ApprovalCallback, Model, Message } from '../../shared/types';
 import { BaseClient, MAX_TOOL_TURNS, SendPromptResult } from './BaseClient';
 import { HistoryConverter, OpenAIMessage } from '../services/HistoryConverter';
-
-interface OllamaApiResponse {
-    message: {
-        role: string;
-        content: string;
-        tool_calls?: Array<{
-            function: { name: string; arguments: Record<string, unknown> };
-        }>;
-    };
-}
 
 export class OllamaClient extends BaseClient {
     public modelName: string;
     private baseUrl: string;
     private toolService: OllamaToolService;
+    private streamService: OllamaStreamService;
 
     constructor() {
         super('Ollama');
         this.modelName = 'llama3';
         this.baseUrl = 'http://localhost:11434';
         this.toolService = new OllamaToolService();
+        this.streamService = new OllamaStreamService();
     }
 
     async initialize() {
@@ -84,9 +77,14 @@ export class OllamaClient extends BaseClient {
         history: Message[],
         mcpManager?: IMcpManager,
         onApproval?: ApprovalCallback,
-        _signal?: AbortSignal,
-        _onChunk?: (chunk: string) => void,
+        signal?: AbortSignal,
+        onChunk?: (chunk: string) => void,
     ): Promise<SendPromptResult> {
+        // Check abort before starting
+        if (signal?.aborted) {
+            throw new Error('Operation aborted');
+        }
+
         // Convert history to OpenAI format (Ollama uses similar format)
         const messages: OpenAIMessage[] = HistoryConverter.toOpenAIFormat(history);
         messages.push({ role: 'user', content: prompt });
@@ -108,19 +106,35 @@ export class OllamaClient extends BaseClient {
         let finalAnswer = '';
 
         while (turn < MAX_TOOL_TURNS) {
+            // Check abort at each turn
+            if (signal?.aborted) {
+                throw new Error('Operation aborted');
+            }
+
             try {
                 this.log.info('Sending prompt to Ollama', { model: this.modelName, turn });
 
-                let response = await fetch(`${this.baseUrl}/api/chat`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        model: this.modelName,
-                        messages,
-                        stream: false,
-                        tools: ollamaTools,
-                    }),
-                });
+                // Create abort controller to link with user's signal
+                const controller = new AbortController();
+                const handleAbort = () => controller.abort();
+                signal?.addEventListener('abort', handleAbort);
+
+                let response: Response;
+                try {
+                    response = await fetch(`${this.baseUrl}/api/chat`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            model: this.modelName,
+                            messages,
+                            stream: true,
+                            tools: ollamaTools,
+                        }),
+                        signal: controller.signal,
+                    });
+                } finally {
+                    signal?.removeEventListener('abort', handleAbort);
+                }
 
                 // If model doesn't support tools, retry without them
                 if (response.status === 400 && ollamaTools && ollamaTools.length > 0) {
@@ -129,15 +143,21 @@ export class OllamaClient extends BaseClient {
                     });
                     ollamaTools = undefined;
 
-                    response = await fetch(`${this.baseUrl}/api/chat`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            model: this.modelName,
-                            messages,
-                            stream: false,
-                        }),
-                    });
+                    signal?.addEventListener('abort', handleAbort);
+                    try {
+                        response = await fetch(`${this.baseUrl}/api/chat`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                model: this.modelName,
+                                messages,
+                                stream: true,
+                            }),
+                            signal: controller.signal,
+                        });
+                    } finally {
+                        signal?.removeEventListener('abort', handleAbort);
+                    }
                 }
 
                 if (!response.ok) {
@@ -145,15 +165,25 @@ export class OllamaClient extends BaseClient {
                     throw new Error(`Ollama API Error: ${response.statusText}`);
                 }
 
-                const data = (await response.json()) as OllamaApiResponse;
-                const message = data.message;
-                const responseText = message?.content || '';
+                // Use streaming service to consume NDJSON
+                const streamOptions: OllamaStreamOptions = {
+                    signal,
+                    // Only stream to UI on first turn (initial response)
+                    onChunk: turn === 0 ? onChunk : undefined,
+                };
+
+                const streamResult = await this.streamService.consumeStream(
+                    response,
+                    streamOptions,
+                );
+                const responseText = streamResult.content;
+                const toolCalls = streamResult.toolCalls;
 
                 // Push assistant response to messages
                 messages.push({
-                    role: message.role as 'user' | 'assistant' | 'system' | 'tool',
+                    role: 'assistant',
                     content: responseText,
-                    tool_calls: message.tool_calls?.map((tc, idx) => ({
+                    tool_calls: toolCalls?.map((tc, idx) => ({
                         id: `call_${idx}`,
                         function: {
                             name: tc.function.name,
@@ -163,14 +193,30 @@ export class OllamaClient extends BaseClient {
                 });
 
                 // Check for tool calls
-                if (message.tool_calls && message.tool_calls.length > 0) {
+                if (toolCalls && toolCalls.length > 0) {
                     this.log.info('Received tool calls from Ollama', {
-                        count: message.tool_calls.length,
+                        count: toolCalls.length,
                     });
 
-                    for (const toolCall of message.tool_calls) {
+                    // Add assistant message with tool_calls to history
+                    toolMessages.push({
+                        role: 'assistant',
+                        content: responseText,
+                        timestamp: new Date().toISOString(),
+                        tool_calls: toolCalls.map((tc, idx) => ({
+                            id: `call_${idx}`,
+                            function: {
+                                name: tc.function.name,
+                                arguments: JSON.stringify(tc.function.arguments),
+                            },
+                        })),
+                    });
+
+                    for (let i = 0; i < toolCalls.length; i++) {
+                        const toolCall = toolCalls[i];
                         const functionName = toolCall.function.name;
                         const args = toolCall.function.arguments;
+                        const toolCallId = `call_${i}`;
 
                         if (!mcpManager) {
                             messages.push({
@@ -207,6 +253,7 @@ export class OllamaClient extends BaseClient {
                                     output: result,
                                     duration: 0,
                                     error: false,
+                                    toolCallId: toolCallId,
                                 },
                             ],
                         });
@@ -221,6 +268,9 @@ export class OllamaClient extends BaseClient {
                     break;
                 }
             } catch (e) {
+                if ((e as Error).message === 'Operation aborted') {
+                    throw e;
+                }
                 const err = e as Error;
                 this.log.error('Ollama request failed', { error: err.message });
 

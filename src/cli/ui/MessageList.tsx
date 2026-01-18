@@ -102,11 +102,16 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
         const terminalHeight = stdout?.rows || 24;
         const viewportHeight = Math.max(5, terminalHeight - 8);
 
+        // Filter out tool messages - they're for history context only, not display
+        const displayMessages = useMemo(() => {
+            return messages.filter((msg) => msg.role !== 'tool');
+        }, [messages]);
+
         // Calculate total content height in lines
         const contentWidth = width > 4 ? width - 4 : width;
         const messageHeights = useMemo(() => {
-            return messages.map((msg) => calculateMessageLines(msg, contentWidth));
-        }, [messages, contentWidth]);
+            return displayMessages.map((msg) => calculateMessageLines(msg, contentWidth));
+        }, [displayMessages, contentWidth]);
 
         const totalContentHeight = useMemo(() => {
             return messageHeights.reduce((sum, h) => sum + h, 0);
@@ -121,19 +126,25 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
                 // eslint-disable-next-line react-hooks/set-state-in-effect
                 setScrollOffset(maxScrollOffset);
             }
-        }, [messages.length, maxScrollOffset, shouldStickToBottom, scrollOffset, streamingText]);
+        }, [
+            displayMessages.length,
+            maxScrollOffset,
+            shouldStickToBottom,
+            scrollOffset,
+            streamingText,
+        ]);
 
         // Calculate which messages to show based on scroll offset
         const visibleMessages = useMemo(() => {
-            if (messages.length === 0) return [];
+            if (displayMessages.length === 0) return [];
 
             let currentLine = 0;
             let startIdx = 0;
-            let endIdx = messages.length;
+            let endIdx = displayMessages.length;
             let skipLines = 0;
 
             // Find start message based on scroll offset
-            for (let i = 0; i < messages.length; i++) {
+            for (let i = 0; i < displayMessages.length; i++) {
                 const msgHeight = messageHeights[i];
                 if (currentLine + msgHeight > scrollOffset) {
                     startIdx = i;
@@ -145,7 +156,7 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
 
             // Find end message based on viewport
             currentLine = 0;
-            for (let i = startIdx; i < messages.length; i++) {
+            for (let i = startIdx; i < displayMessages.length; i++) {
                 currentLine += messageHeights[i];
                 if (currentLine >= viewportHeight + skipLines) {
                     endIdx = i + 1;
@@ -153,8 +164,8 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
                 }
             }
 
-            return messages.slice(startIdx, endIdx);
-        }, [messages, messageHeights, scrollOffset, viewportHeight]);
+            return displayMessages.slice(startIdx, endIdx);
+        }, [displayMessages, messageHeights, scrollOffset, viewportHeight]);
 
         useImperativeHandle(
             ref,
