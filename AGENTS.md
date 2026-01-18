@@ -61,6 +61,15 @@ Antes de aplicar regras complexas, entenda onde você está pisando.
 
 ---
 
+## 💾 CONSISTÊNCIA DE DADOS (UNIFIED HISTORY)
+
+O projeto migrou para um modelo de **Histórico Unificado**.
+
+- **Single Source of Truth**: Todos os clients (`Gemini`, `Copilot`, `Ollama`) consomem e produzem mensagens no formato unificado `Message[]`.
+- **HistoryConverter**: Qualquer conversão para formatos específicos de API deve ser feita **exclusivamente** via `HistoryConverter`. Nunca faça parsings manuais nos clients.
+
+---
+
 ## 🔧 CONTEXTO DESTE PROJETO (GEMINI CLI)
 
 ### Stack Tecnológica

@@ -1,79 +1,99 @@
-# IA-Chat
+# IA-Chat CLI
 
-**IA-Chat** é uma aplicação desktop moderna e poderosa desenvolvida com Electron e React. Ela unifica o acesso aos modelos **Google Gemini** e **GitHub Copilot** em uma única interface, permitindo alternar fluidamente entre eles.
+**IA-Chat** é uma aplicação de terminal (CLI) moderna e poderosa desenvolvida com **React** e **Ink**. Ela unifica o acesso aos modelos **Google Gemini**, **GitHub Copilot** e **Ollama** em uma única interface, permitindo alternar fluidamente entre eles.
 
 O grande diferencial do projeto é a **integração nativa com MCP (Model Context Protocol)**. Isso permite que você conecte "servidores de ferramentas" (como acesso a arquivos, bancos de dados, terminais cmd) e dê superpoderes aos modelos de IA, tudo rodando localmente no seu computador com controle total de privacidade e segurança.
 
+---
+
 ## Principais Funcionalidades
 
-*   🤖 **Múltiplos Modelos**: Suporte nativo ao Google Gemini (Flash, Pro) e GitHub Copilot (GPT-4o, Claude 3.5 Sonnet, etc).
-*   🛠️ **MCP (Model Context Protocol)**: Conecte ferramentas externas padronizadas. O app já vem com ferramentas de sistema (leitura de arquivos, terminal) prontas para uso.
-*   🔒 **Segurança e Privacidade**:
-    *   Todo o histórico é salvo localmente no seu disco.
-    *   **Controle de Aprovação**: Antes da IA executar qualquer comando ou ler um arquivo, o app pede sua permissão explícita.
-*   🎨 **Interface Premium**: Design moderno, responsivo e com suporte a markdown, syntax highlighting e visualização de diffs.
+- 🤖 **Múltiplos Modelos**:
+    - **Google Gemini**: Acesso aos modelos Flash e Pro.
+    - **GitHub Copilot**: Integração com modelos GPT-4o e Claude 3.5 Sonnet.
+    - **Ollama**: Suporte para rodar modelos locais (Llama 3, Mistral, etc).
+- 🔄 **Histórico Unificado**: Suas conversas são salvas e mantidas independente do provedor usado. O contexto é preservado entre sessões.
+- 🛠️ **MCP (Model Context Protocol)**:
+    - Conecte ferramentas externas padronizadas.
+    - Ferramentas de sistema (leitura de arquivos, terminal) já integradas.
+    - **Toggle Rápido**: Ative/Desative ferramentas facilmente via `Alt+T`.
+- 🔒 **Segurança e Privacidade**:
+    - Histórico salvo localmente (`~/.gemini-desktop`).
+    - **Controle de Aprovação**: Antes da IA executar qualquer comando ou ler um arquivo, o app pede sua permissão explícita em um modal dedicado.
+- 🎨 **Interface TUI Premium**: Interface de texto rica com suporte a markdown, syntax highlighting, spinners animados e navegação via teclado.
 
 ---
 
-## Como Rodar (Desenvolvimento)
+## Atalhos e Comandos
+
+O aplicativo é focado em produtividade via teclado. Aqui estão os principais atalhos (consulte a qualquer momento com `Alt+H`):
+
+### Gerenciamento de Chat
+
+| Atalho    | Ação          | Descrição                                                    |
+| :-------- | :------------ | :----------------------------------------------------------- |
+| **Alt+N** | Novo Chat     | Inicia uma nova conversa limpa.                              |
+| **Alt+C** | Carregar Chat | Abre o modal de histórico para retomar conversas anteriores. |
+| **Alt+X** | Cancelar      | Interrompe a geração da resposta atual.                      |
+| **Alt+T** | Toggle MCP    | Abre modal para ativar/desativar ferramentas MCP.            |
+
+### Navegação e Sistema
+
+| Atalho    | Ação              | Descrição                                      |
+| :-------- | :---------------- | :--------------------------------------------- |
+| **Alt+P** | Trocar Provedor   | Alterna entre Gemini, Copilot e Ollama.        |
+| **Alt+M** | Selecionar Modelo | Escolhe o modelo específico do provedor atual. |
+| **Alt+A** | Autenticar        | Inicia fluxo de login (se necessário).         |
+| **Alt+L** | Logs              | Abre visualizador de logs de debug.            |
+| **Alt+O** | Logout            | Desconecta e limpa credenciais.                |
+| **Alt+Q** | Sair              | Fecha a aplicação.                             |
+| **Alt+H** | Ajuda             | Exibe a lista de atalhos.                      |
+
+### Slash Commands
+
+Digite estes comandos na caixa de entrada:
+
+- `/compress`: Otimiza o histórico da conversa para economizar tokens.
+- `/tokens`: Exibe uma estimativa de uso de tokens da conversa atual.
+
+---
+
+## Como Rodar
 
 ### Pré-requisitos
-*   **Node.js** (v18 ou superior recomendado).
-*   Uma chave de API do **Gemini** (Google AI Studio).
-*   *(Opcional)* Conta GitHub com acesso ao Copilot (autenticação feita via navegador).
 
-### Instalação
+- **Node.js** (v18+ recomendado).
+- Chaves de API conforme o uso:
+    - **Gemini**: Chave do Google AI Studio.
+    - **Copilot**: Conta GitHub ativa.
+    - **Ollama**: Servidor Ollama rodando localmente (opcional).
+
+### Instalação e Execução
 
 1.  Clone o repositório e instale as dependências:
+
     ```bash
     npm install
     ```
 
-2.  Inicie em modo de desenvolvimento:
+2.  Para rodar a interface CLI:
+
     ```bash
-    npm run dev
+    npm run cli
     ```
-    *Isso abrirá a janela do app com Hot Reload ativo.*
+
+    _Este comando compila o projeto e inicia a interface no seu terminal._
+
+3.  Para desenvolvimento (com watch mode):
+
+    ```bash
+    # Em um terminal, compile em modo watch:
+    npm run build:cli -- --watch
+
+    # Em outro, rode o app (necessário reiniciar se houver crash):
+    node dist/cli.mjs
+    ```
 
 ---
 
-## Como Gerar o Executável (AppImage / .exe)
-
-O projeto está configurado para gerar um arquivo **AppImage** (Linux) portátil, que roda na maioria das distribuições sem instalação.
-
-### Gerando o Build
-
-Rode o comando:
-
-```bash
-npm run dist
-```
-
-Isso criará uma pasta `release/` na raiz do projeto contendo:
-*   **Linux**: Um arquivo `.AppImage` (ex: `IA-Chat-1.0.0.AppImage`).
-*   **Windows**: Um instalador `.exe` (se rodado no Windows ou com Wine configurado).
-
-### Rodando o AppImage (Linux)
-
-Após gerar o arquivo:
-1.  Vá até a pasta release: `cd release`
-2.  Dê permissão de execução: `chmod +x IA-Chat-*.AppImage`
-3.  Execute: `./IA-Chat-*.AppImage`
-
-> **Nota para usuários Ubuntu 22.04+**:
-> O AppImage precisa da biblioteca FUSE. Se não rodar, instale:
-> `sudo apt install libfuse2`
-
-### Gerando Instalador Windows (.exe)
-
-Para gerar o instalador do Windows estando no Linux, você precisa ter o **Wine** instalado (`sudo dnf install wine`).
-
-Execute:
-```bash
-npm run dist -- --win
-```
-
-O arquivo de instalação (ex: `IA-Chat Setup 1.0.0.exe`) será gerado na pasta `release/`. Você pode copiar esse arquivo para um computador Windows e instalá-lo normalmente.
-
----
-*Desenvolvido com Electron, React, Vite, Google Generative AI e GitHub Copilot.*
+_Desenvolvido com React, Ink e TypeScript._

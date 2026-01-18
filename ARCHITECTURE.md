@@ -4,7 +4,7 @@ Este documento descreve a arquitetura atual do **IA-Chat**, que evoluiu para uma
 
 ## Visão Geral
 
-O projeto abandonou a arquitetura Electron anterior em favor de uma CLI leve e focada em desenvolvedores, mantendo a capacidade de interagir com múltiplos modelos (Gemini, Copilot, Ollama) e executar ferramentas complexas via **Model Context Protocol (MCP)**.
+O projeto abandonou a arquitetura Electron anterior em favor de uma CLI leve e focada em desenvolvedores, mantendo a capacidade de interagir com múltiplos modelos (Gemini, Copilot, Ollama) e executar ferramentas complexas via **Model Context Protocol (MCP)**. Um diferencial chave é o **Histórico Unificado**, que garante que o contexto da conversa seja preservado independentemente de qual provedor de IA você esteja usando.
 
 ### Stack Tecnológica
 
@@ -57,8 +57,13 @@ Cada provedor (Gemini, Copilot, Ollama) possui uma classe dedicada que normaliza
 - **Gerenciamento de Histórico**: Mantém o contexto da conversa.
 - **Integração MCP**: Mapeia ferramentas disponíveis para o formato específico do modelo.
 - **Execução de Ferramentas**: Coordena a execução de tools aprovadas pelo usuário.
+- **Unified Message Format**: Todos os clients aceitam `Message[]` como entrada e usam o `HistoryConverter` para adaptar para a API específica.
 
-### 3. Model Context Protocol (MCP)
+### 3. HistoryConverter (`src/boot/services/history-converter.ts`)
+
+Componente crucial que normaliza as mensagens. Ele é responsável por traduzir o formato interno unificado (`Message[]`) para os formatos específicos de cada provedor (Google AI, OpenAI/Azure, Ollama), garantindo que tool calls e respostas sejam corretamente formatadas.
+
+### 4. Model Context Protocol (MCP)
 
 O suporte a MCP é central para a capacidade de agente do CLI.
 
