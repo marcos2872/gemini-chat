@@ -90,6 +90,7 @@ export class OllamaClient extends BaseClient {
         prompt: string,
         mcpManager?: IMcpManager,
         onApproval?: ApprovalCallback,
+        _signal?: AbortSignal, // TODO: Implement abort support
     ): Promise<string> {
         // 1. Add user message
         this.history.push({ role: 'user', content: prompt });

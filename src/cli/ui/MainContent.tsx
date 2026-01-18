@@ -101,6 +101,8 @@ export const MainContent: React.FC<MainContentProps> = ({
             ref={messageListRef}
             messages={chat.conversation?.messages || []}
             width={dimensions.columns}
+            streamingText={chat.streamingText}
+            isProcessing={chat.isProcessing}
         />
     );
 };

@@ -114,6 +114,12 @@ export const App = () => {
                 await chat.refreshMcpServers();
                 chat.setMode(CHAT_MODES.MCP_MANAGER);
             }
+            // Alt+X: Cancel current request
+            if (_input === 'x') {
+                if (chat.isProcessing) {
+                    chat.cancelRequest();
+                }
+            }
         }
     });
 
@@ -149,8 +155,9 @@ export const App = () => {
                 </Box>
                 <Box paddingX={1}>
                     <Text color="gray">
-                        [Alt+M]-Model [Alt+P]-Provider [Alt+T]-Tools [Alt+A]-Auth [Alt+C]-Clear
-                        [Alt+H]-Help [Alt+Q]-Quit
+                        {chat.isProcessing
+                            ? '[Alt+X]-Cancel'
+                            : '[Alt+M]-Model [Alt+P]-Provider [Alt+T]-Tools [Alt+A]-Auth [Alt+C]-Clear [Alt+H]-Help [Alt+Q]-Quit'}
                     </Text>
                 </Box>
             </Box>

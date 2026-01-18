@@ -130,6 +130,7 @@ export abstract class BaseClient {
         prompt: string,
         mcpManager?: IMcpManager,
         onApproval?: ApprovalCallback,
+        signal?: AbortSignal,
     ): Promise<string>;
 }
 

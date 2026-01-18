@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState, useRef } from 'react';
 import { mcpService } from '../services';
 import { createLogger } from '../../boot/lib/logger';
 import {
@@ -47,6 +47,10 @@ export interface CommandContext {
     // Chat action
     handleSubmit: (text: string) => void;
 
+    // Cancel/Streaming support
+    cancelRequest: () => void;
+    streamingText: string;
+
     // From useApproval
     approvalRequest: Omit<ToolApprovalRequest, 'resolve'> | null;
     handleApprove: () => void;
@@ -68,6 +72,10 @@ export const useChat = (): CommandContext => {
     const approval: ApprovalState = useApproval();
     const mcpManager: McpManagerState = useMcpManager();
 
+    // Streaming and cancellation state
+    const [streamingText, setStreamingText] = useState('');
+    const abortControllerRef = useRef<AbortController | null>(null);
+
     // Initialize app on mount
     useInitialization({
         setProvider: state.setProvider,
@@ -77,10 +85,26 @@ export const useChat = (): CommandContext => {
         provider: state.provider,
     });
 
+    // Cancel current request
+    const cancelRequest = useCallback(() => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+            state.setIsProcessing(false);
+            state.setStatus('Cancelled');
+            setStreamingText('');
+            log.info('Request cancelled by user');
+        }
+    }, [state]);
+
     // Chat submit handler using unified provider interface
     const handleSubmit = useCallback(
         async (text: string) => {
             if (!text.trim() || state.isProcessing || !state.conversation) return;
+
+            // Create AbortController for this request
+            abortControllerRef.current = new AbortController();
+            setStreamingText('');
 
             state.setIsProcessing(true);
             state.setStatus('Thinking...');
@@ -103,17 +127,32 @@ export const useChat = (): CommandContext => {
                     state.conversation,
                     mcpService,
                     approval.onApproval,
+                    {
+                        signal: abortControllerRef.current.signal,
+                        onChunk: (chunk) => {
+                            setStreamingText((prev) => prev + chunk);
+                        },
+                    },
                 );
 
                 state.setConversation(updatedConversation);
                 state.setStatus('Ready');
+                setStreamingText('');
             } catch (err) {
                 const error = err as Error;
+
+                // Don't show error for cancelled requests
+                if (error.message === 'Operation aborted') {
+                    log.info('Request was cancelled');
+                    return;
+                }
+
                 log.error('Chat submit failed', { error: error.message });
                 state.setStatus(`Error: ${error.message}`);
                 state.addSystemMessage(`Error: ${error.message}`);
             } finally {
                 state.setIsProcessing(false);
+                abortControllerRef.current = null;
             }
         },
         [state, approval.onApproval],
@@ -142,6 +181,10 @@ export const useChat = (): CommandContext => {
 
         // Chat action
         handleSubmit,
+
+        // Cancel/Streaming
+        cancelRequest,
+        streamingText,
 
         // From approval
         approvalRequest: approval.approvalRequest,

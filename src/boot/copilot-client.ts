@@ -211,6 +211,7 @@ export class CopilotClient extends BaseClient {
         prompt: string,
         mcpManager?: IMcpManager,
         onApproval?: ApprovalCallback,
+        _signal?: AbortSignal, // TODO: Implement abort support
     ): Promise<string> {
         if (!this.oauthToken) {
             this.log.error('sendPrompt failed: Not authenticated');

@@ -20,6 +20,15 @@ interface MessageItemProps {
     width: number;
 }
 
+interface MessageListProps {
+    messages: Message[];
+    width: number;
+    /** Text being streamed from the AI (Gemini only) */
+    streamingText?: string;
+    /** Whether a request is currently processing */
+    isProcessing?: boolean;
+}
+
 const MessageItem = ({ message, width }: MessageItemProps) => {
     const isUser = message.role === 'user';
     const senderName = isUser
@@ -39,6 +48,25 @@ const MessageItem = ({ message, width }: MessageItemProps) => {
 };
 
 MessageItem.displayName = 'MessageItem';
+
+/**
+ * Streaming message component - shows text being typed with a cursor
+ */
+const StreamingMessage = ({ text, width }: { text: string; width: number }) => {
+    return (
+        <Box flexDirection="column" marginBottom={1} width={width} flexShrink={0}>
+            <Text color="green" bold>
+                Gemini:
+            </Text>
+            <Text wrap="wrap">
+                {text}
+                <Text color="cyan">▌</Text>
+            </Text>
+        </Box>
+    );
+};
+
+StreamingMessage.displayName = 'StreamingMessage';
 
 // Calculate how many lines a message will take
 const calculateMessageLines = (message: Message, width: number): number => {
@@ -63,8 +91,8 @@ const calculateMessageLines = (message: Message, width: number): number => {
     return totalLines;
 };
 
-export const MessageList = forwardRef<MessageListHandle, { messages: Message[]; width: number }>(
-    ({ messages, width }, ref) => {
+export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
+    ({ messages, width, streamingText, isProcessing }, ref) => {
         const { stdout } = useStdout();
         const [scrollOffset, setScrollOffset] = useState(0);
         const [shouldStickToBottom, setShouldStickToBottom] = useState(true);
@@ -86,14 +114,14 @@ export const MessageList = forwardRef<MessageListHandle, { messages: Message[]; 
 
         const maxScrollOffset = Math.max(0, totalContentHeight - viewportHeight);
 
-        // Auto-scroll to bottom when new messages arrive
+        // Auto-scroll to bottom when new messages arrive or streaming
         // This pattern is intentional for chat auto-scroll behavior
         useEffect(() => {
             if (shouldStickToBottom && maxScrollOffset !== scrollOffset) {
                 // eslint-disable-next-line react-hooks/set-state-in-effect
                 setScrollOffset(maxScrollOffset);
             }
-        }, [messages.length, maxScrollOffset, shouldStickToBottom, scrollOffset]);
+        }, [messages.length, maxScrollOffset, shouldStickToBottom, scrollOffset, streamingText]);
 
         // Calculate which messages to show based on scroll offset
         const visibleMessages = useMemo(() => {
@@ -179,6 +207,10 @@ export const MessageList = forwardRef<MessageListHandle, { messages: Message[]; 
                             width={contentWidth}
                         />
                     ))}
+                    {/* Show streaming message when processing and there's streaming text */}
+                    {isProcessing && streamingText && (
+                        <StreamingMessage text={streamingText} width={contentWidth} />
+                    )}
                 </Box>
                 <Box justifyContent="flex-end" width={contentWidth}>
                     <Text color="gray">

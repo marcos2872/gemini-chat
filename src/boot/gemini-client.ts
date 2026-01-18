@@ -3,14 +3,23 @@ import { v4 as uuidv4 } from 'uuid';
 import { OAuth2Client } from 'google-auth-library';
 import { GeminiHandshakeService } from './services/gemini/GeminiHandshakeService';
 import { GeminiToolService } from './services/gemini/GeminiToolService';
-import { GeminiStreamService } from './services/gemini/GeminiStreamService';
+import { GeminiStreamService, StreamOptions } from './services/gemini/GeminiStreamService';
 import { Content, Part, GeminiTool } from './services/gemini/types';
 import { GeminiListModelsService } from './services/gemini/GeminiListModelsService';
 import { Model, IMcpManager, ApprovalCallback } from '../shared/types';
 import { BaseClient, MAX_TOOL_TURNS } from './clients/BaseClient';
+import { retryService, RetryOptions } from './services/gemini/RetryService';
+import { chatCompressionService } from './services/gemini/ChatCompressionService';
 
 // Internal API Constants
 const ENDPOINT = 'https://cloudcode-pa.googleapis.com/v1internal';
+
+// Retry configuration for API calls
+const API_RETRY_OPTIONS: Partial<RetryOptions> = {
+    maxAttempts: 3,
+    initialDelayMs: 500,
+    maxDelayMs: 5000,
+};
 
 export class GeminiClient extends BaseClient {
     private configPath: string | undefined;
@@ -83,13 +92,25 @@ export class GeminiClient extends BaseClient {
 
     /**
      * Main Prompt Function with Tool Loop
+     * @param prompt - The user's prompt
+     * @param mcpManager - Optional MCP manager for tool execution
+     * @param onApproval - Optional callback for tool approval
+     * @param signal - Optional AbortSignal to cancel the request
+     * @param onChunk - Optional callback for streaming text chunks
      */
     async sendPrompt(
         prompt: string,
         mcpManager?: IMcpManager,
         onApproval?: ApprovalCallback,
+        signal?: AbortSignal,
+        onChunk?: (chunk: string) => void,
     ): Promise<string> {
         try {
+            // Check if aborted before starting
+            if (signal?.aborted) {
+                throw new Error('Operation aborted');
+            }
+
             if (!this.client) await this.initialize();
             if (!this.client)
                 throw new Error('Você não está autenticado. Use o comando /auth para fazer login.');
@@ -104,6 +125,9 @@ export class GeminiClient extends BaseClient {
             // Add user message to history
             this.geminiHistory.push({ role: 'user', parts: [{ text: prompt }] });
 
+            // Check if compression is needed
+            this.maybeCompressHistory();
+
             // Prepare Tools
             let geminiTools: GeminiTool[] | undefined = undefined;
             if (mcpManager) {
@@ -116,13 +140,15 @@ export class GeminiClient extends BaseClient {
             let turn = 0;
             let finalAnswer = '';
 
-            // 2. Loop
+            // 2. Tool Loop with retry support
             while (turn < MAX_TOOL_TURNS) {
-                // Build Payload with current history (which includes previous turns)
-                // Filter out any empty contents from history to prevent INVALID_ARGUMENT
-                const validHistory = this.geminiHistory.filter(
-                    (h) => h.parts && h.parts.length > 0,
-                );
+                // Check if aborted
+                if (signal?.aborted) {
+                    throw new Error('Operation aborted');
+                }
+
+                // Get curated history for API request
+                const validHistory = this.getCuratedHistory();
 
                 const payload = this.buildInternalRequestPayload(
                     {
@@ -135,16 +161,32 @@ export class GeminiClient extends BaseClient {
                 );
 
                 this.log.debug('Sending request', { turn });
-                const stream = await this.sendInternalChat(this.client, payload);
 
-                // Parse Full Response
-                const responseContent = await this.streamService.consumeStream(stream);
+                // Send request with retry logic
+                const stream = await retryService.withRetry(
+                    () => this.sendInternalChat(this.client!, payload),
+                    { ...API_RETRY_OPTIONS, signal },
+                );
+
+                // Prepare stream options
+                const streamOptions: StreamOptions = {
+                    signal,
+                    // Only pass onChunk for the final response (when no tool calls expected)
+                    // Tool calls need to complete before streaming to UI
+                    onChunk: turn === 0 ? onChunk : undefined,
+                };
+
+                // Parse Full Response with streaming callback
+                const responseContent = await this.streamService.consumeStream(
+                    stream,
+                    streamOptions,
+                );
 
                 // Add Model Response to History
-                this.geminiHistory.push(responseContent);
+                this.geminiHistory.push(responseContent.content);
 
                 // Check for Function Calls
-                const functionCalls = responseContent.parts
+                const functionCalls = responseContent.content.parts
                     .filter((p) => p.functionCall)
                     .map((p) => p.functionCall!);
 
@@ -152,6 +194,11 @@ export class GeminiClient extends BaseClient {
                     this.log.info('Received tool calls', { count: functionCalls.length });
 
                     for (const call of functionCalls) {
+                        // Check abort before each tool execution
+                        if (signal?.aborted) {
+                            throw new Error('Operation aborted');
+                        }
+
                         let result: unknown;
 
                         if (!mcpManager) {
@@ -188,15 +235,131 @@ export class GeminiClient extends BaseClient {
                     turn++;
                 } else {
                     // No function calls, this is the final text
-                    finalAnswer = responseContent.parts.map((p) => p.text).join('');
+                    finalAnswer = responseContent.content.parts
+                        .filter((p) => p.text)
+                        .map((p) => p.text)
+                        .join('');
                     break;
                 }
             }
 
             return finalAnswer;
         } catch (error) {
+            // Don't transform abort errors
+            if ((error as Error).message === 'Operation aborted') {
+                throw error;
+            }
             this.handleApiError(error as Error);
         }
+    }
+
+    /**
+     * Check and compress history if needed
+     */
+    private maybeCompressHistory(): void {
+        const result = chatCompressionService.compress(this.geminiHistory, this.modelName);
+
+        if (result.compressed) {
+            this.geminiHistory = result.newHistory;
+            this.log.info('History compressed automatically', {
+                status: result.status,
+                reduction: `${result.originalTokenCount} -> ${result.newTokenCount} tokens`,
+            });
+        }
+    }
+
+    /**
+     * Force compress history (for manual /compress command)
+     */
+    forceCompressHistory(): { compressed: boolean; message: string } {
+        const result = chatCompressionService.compress(this.geminiHistory, this.modelName, true);
+
+        if (result.compressed) {
+            this.geminiHistory = result.newHistory;
+            return {
+                compressed: true,
+                message: `Histórico comprimido: ${result.originalTokenCount} → ${result.newTokenCount} tokens`,
+            };
+        }
+
+        return {
+            compressed: false,
+            message:
+                result.status === 'SKIPPED_TOO_SHORT'
+                    ? 'Histórico muito curto para compressão.'
+                    : 'Nenhuma compressão necessária.',
+        };
+    }
+
+    /**
+     * Get curated history - filters out invalid/empty content
+     * Based on gemini-cli's extractCuratedHistory
+     */
+    private getCuratedHistory(): Content[] {
+        if (this.geminiHistory.length === 0) {
+            return [];
+        }
+
+        const curatedHistory: Content[] = [];
+        const length = this.geminiHistory.length;
+        let i = 0;
+
+        while (i < length) {
+            const content = this.geminiHistory[i];
+
+            if (content.role === 'user') {
+                // User content is always included if it has parts
+                if (this.isValidContent(content)) {
+                    curatedHistory.push(content);
+                }
+                i++;
+            } else {
+                // For model content, collect consecutive model messages
+                const modelOutput: Content[] = [];
+                let isValid = true;
+
+                while (i < length && this.geminiHistory[i].role === 'model') {
+                    modelOutput.push(this.geminiHistory[i]);
+                    if (isValid && !this.isValidContent(this.geminiHistory[i])) {
+                        isValid = false;
+                    }
+                    i++;
+                }
+
+                // Only include model output block if all parts are valid
+                if (isValid) {
+                    curatedHistory.push(...modelOutput);
+                }
+            }
+        }
+
+        return curatedHistory;
+    }
+
+    /**
+     * Validate a Content object
+     */
+    private isValidContent(content: Content): boolean {
+        if (!content.parts || content.parts.length === 0) {
+            return false;
+        }
+
+        for (const part of content.parts) {
+            if (!part || Object.keys(part).length === 0) {
+                return false;
+            }
+            // Empty text is invalid (unless it's a function call/response)
+            if (
+                part.text !== undefined &&
+                part.text === '' &&
+                !part.functionCall &&
+                !part.functionResponse
+            ) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private buildInternalRequestPayload(

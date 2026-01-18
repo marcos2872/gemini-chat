@@ -3,12 +3,27 @@ import { Provider, Model, Conversation, ApprovalCallback, Message } from '../../
 import { McpService } from '../../boot/mcp/McpService';
 
 /**
+ * Options for sending a prompt to a provider.
+ * All fields except mcp and onApproval are optional for retrocompatibility.
+ */
+export interface SendOptions {
+    /** MCP service for tools */
+    mcp: McpService;
+    /** Callback for tool approval */
+    onApproval: ApprovalCallback;
+    /** Optional: AbortSignal to cancel the request */
+    signal?: AbortSignal;
+    /** Optional: Callback for streaming chunks (Gemini only) */
+    onChunk?: (chunk: string) => void;
+}
+
+/**
  * Unified interface for all chat providers (Gemini, Copilot, Ollama).
  * Eliminates if/else chains by providing a common API.
  */
 export interface ChatProvider {
     /** Send a prompt and get a response */
-    sendPrompt(text: string, mcp: McpService, onApproval: ApprovalCallback): Promise<string>;
+    sendPrompt(text: string, options: SendOptions): Promise<string>;
 
     /** Check if provider is configured/authenticated */
     isConfigured(): boolean;
@@ -32,7 +47,14 @@ export const getProvider = (providerName: Provider): ChatProvider => {
     switch (providerName) {
         case 'gemini':
             return {
-                sendPrompt: (text, mcp, onApproval) => gemini.sendPrompt(text, mcp, onApproval),
+                sendPrompt: (text, options) =>
+                    gemini.sendPrompt(
+                        text,
+                        options.mcp,
+                        options.onApproval,
+                        options.signal,
+                        options.onChunk,
+                    ),
                 isConfigured: () => gemini.isConfigured(),
                 setModel: (m) => gemini.setModel(m),
                 listModels: () => gemini.listModels(),
@@ -40,7 +62,9 @@ export const getProvider = (providerName: Provider): ChatProvider => {
             };
         case 'copilot':
             return {
-                sendPrompt: (text, mcp, onApproval) => copilot.sendPrompt(text, mcp, onApproval),
+                // Copilot doesn't support signal/onChunk yet, just pass the basics
+                sendPrompt: (text, options) =>
+                    copilot.sendPrompt(text, options.mcp, options.onApproval),
                 isConfigured: () => copilot.isConfigured(),
                 setModel: (m) => copilot.setModel(m),
                 listModels: () => copilot.listModels(),
@@ -48,14 +72,26 @@ export const getProvider = (providerName: Provider): ChatProvider => {
             };
         case 'ollama':
             return {
-                sendPrompt: (text, mcp, onApproval) => ollama.sendPrompt(text, mcp, onApproval),
-                isConfigured: () => true, // Ollama doesn't need auth
+                // Ollama doesn't support signal/onChunk yet, just pass the basics
+                sendPrompt: (text, options) =>
+                    ollama.sendPrompt(text, options.mcp, options.onApproval),
+                isConfigured: () => ollama.isConfigured(),
                 setModel: (m) => ollama.setModel(m),
                 listModels: () => ollama.listModels(),
                 initialize: () => ollama.validateConnection(),
             };
     }
 };
+
+/**
+ * Options for handleChatSubmit
+ */
+export interface ChatSubmitOptions {
+    /** Optional: AbortSignal to cancel the request */
+    signal?: AbortSignal;
+    /** Optional: Callback for streaming chunks */
+    onChunk?: (chunk: string) => void;
+}
 
 /**
  * Helper to handle chat submission with any provider.
@@ -67,6 +103,7 @@ export const handleChatSubmit = async (
     conversation: Conversation,
     mcp: McpService,
     onApproval: ApprovalCallback,
+    options?: ChatSubmitOptions,
 ): Promise<{ response: string; updatedConversation: Conversation }> => {
     const providerImpl = getProvider(provider);
 
@@ -87,8 +124,13 @@ export const handleChatSubmit = async (
         messages: [...conversation.messages, userMsg],
     };
 
-    // Send to provider
-    const responseText = await providerImpl.sendPrompt(text, mcp, onApproval);
+    // Send to provider with all options
+    const responseText = await providerImpl.sendPrompt(text, {
+        mcp,
+        onApproval,
+        signal: options?.signal,
+        onChunk: options?.onChunk,
+    });
 
     // Create AI response message
     const aiMsg: Message = {
