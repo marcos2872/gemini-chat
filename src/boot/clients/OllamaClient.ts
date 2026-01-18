@@ -86,7 +86,7 @@ export class OllamaClient extends BaseClient {
         }
 
         // Convert history to OpenAI format (Ollama uses similar format)
-        const messages: OpenAIMessage[] = HistoryConverter.toOpenAIFormat(history);
+        let messages: OpenAIMessage[] = HistoryConverter.toOpenAIFormat(history);
         messages.push({ role: 'user', content: prompt });
 
         // Track tool messages
@@ -100,6 +100,11 @@ export class OllamaClient extends BaseClient {
                 ollamaTools = this.toolService.mapToolsToOllama(tools);
                 this.log.info('Mapped MCP tools for Ollama', { count: ollamaTools.length });
             }
+        }
+
+        // If no tools available, filter out tool-related messages from history upfront
+        if (!ollamaTools) {
+            messages = this.filterToolMessages(messages);
         }
 
         let turn = 0;
@@ -143,6 +148,9 @@ export class OllamaClient extends BaseClient {
                     });
                     ollamaTools = undefined;
 
+                    // Filter out tool-related messages from history
+                    const filteredMessages = this.filterToolMessages(messages);
+
                     signal?.addEventListener('abort', handleAbort);
                     try {
                         response = await fetch(`${this.baseUrl}/api/chat`, {
@@ -150,7 +158,7 @@ export class OllamaClient extends BaseClient {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 model: this.modelName,
-                                messages,
+                                messages: filteredMessages,
                                 stream: true,
                             }),
                             signal: controller.signal,
@@ -292,5 +300,29 @@ export class OllamaClient extends BaseClient {
 
     reset() {
         // No persistent state to clear
+    }
+
+    /**
+     * Filter out tool-related messages from history for models that don't support tools
+     */
+    private filterToolMessages(messages: OpenAIMessage[]): OpenAIMessage[] {
+        return messages
+            .filter((msg) => {
+                // Remove tool messages
+                if (msg.role === 'tool') return false;
+                // Remove assistant messages with tool_calls but no content
+                if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
+                    return msg.content && msg.content.trim().length > 0;
+                }
+                return true;
+            })
+            .map((msg) => {
+                // Remove tool_calls from assistant messages
+                if (msg.tool_calls) {
+                    const { tool_calls: _, ...rest } = msg;
+                    return rest as OpenAIMessage;
+                }
+                return msg;
+            });
     }
 }
