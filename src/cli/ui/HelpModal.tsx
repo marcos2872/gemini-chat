@@ -36,8 +36,16 @@ export const HelpModal = ({ onClose }: HelpModalProps) => {
                     <Text> : Select Model</Text>
                 </Box>
                 <Box>
+                    <Text bold>Alt + T</Text>
+                    <Text> : Toggle MCP Tools</Text>
+                </Box>
+                <Box>
                     <Text bold>Alt + C</Text>
                     <Text> : Clear Conversation</Text>
+                </Box>
+                <Box>
+                    <Text bold>Alt + X</Text>
+                    <Text> : Cancel current request</Text>
                 </Box>
                 <Box>
                     <Text bold>Alt + A</Text>
@@ -58,6 +66,18 @@ export const HelpModal = ({ onClose }: HelpModalProps) => {
                 <Box>
                     <Text bold>Alt + H</Text>
                     <Text> : Show this Help</Text>
+                </Box>
+                <Box marginTop={1}>
+                    <Text bold color="cyan">
+                        /compress
+                    </Text>
+                    <Text> : Compress chat history (Gemini)</Text>
+                </Box>
+                <Box>
+                    <Text bold color="cyan">
+                        /tokens
+                    </Text>
+                    <Text> : Show token estimate (Gemini)</Text>
                 </Box>
             </Box>
 

@@ -292,6 +292,21 @@ export class GeminiClient extends BaseClient {
     }
 
     /**
+     * Get token estimate for current conversation
+     * Used by /tokens command
+     */
+    getTokenEstimate(): { currentTokens: number; modelLimit: number; model: string } {
+        const currentTokens = chatCompressionService.estimateTokenCount(this.geminiHistory);
+        const modelLimit = chatCompressionService.getTokenLimit(this.modelName);
+
+        return {
+            currentTokens,
+            modelLimit,
+            model: this.modelName,
+        };
+    }
+
+    /**
      * Get curated history - filters out invalid/empty content
      * Based on gemini-cli's extractCuratedHistory
      */
