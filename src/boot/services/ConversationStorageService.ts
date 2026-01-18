@@ -61,7 +61,9 @@ export class ConversationStorage {
     async saveConversation(conversation: Conversation) {
         try {
             await this.ensureStorageDir();
-            const updatedConv = { ...conversation, endTime: new Date().toISOString() };
+            // Remove model from saved data - it's session-specific, not persistent
+            const { model: _, ...conversationWithoutModel } = conversation;
+            const updatedConv = { ...conversationWithoutModel, endTime: new Date().toISOString() };
 
             const filePath = path.join(this.storagePath, `${updatedConv.id}.json`);
             await fs.writeFile(filePath, JSON.stringify(updatedConv, null, 2));
