@@ -1,8 +1,11 @@
 /**
  * Base Client - Abstract base class for AI provider clients
- * Provides common functionality for tool loop, history management, and error handling
+ * Provides common functionality for tool loop and error handling
+ *
+ * Note: History is managed by the CLI (conversation.messages), not by clients.
+ * Clients receive history as a parameter and convert to their specific format.
  */
-import { IMcpManager, ApprovalCallback, Model, HistoryMessage } from '../../shared/types';
+import { IMcpManager, ApprovalCallback, Model, Message } from '../../shared/types';
 import { createLogger } from '../lib/logger';
 
 export interface ToolCallResult {
@@ -14,38 +17,10 @@ type Logger = ReturnType<typeof createLogger>;
 
 export abstract class BaseClient {
     public abstract modelName: string;
-    protected history: HistoryMessage[] = [];
     protected readonly log: Logger;
 
     constructor(loggerName: string) {
         this.log = createLogger(loggerName);
-    }
-
-    /**
-     * Add a message to the conversation history
-     */
-    addToHistory(role: string, content: string): HistoryMessage {
-        const msg: HistoryMessage = {
-            role,
-            content,
-            timestamp: new Date().toISOString(),
-        };
-        this.history.push(msg);
-        return msg;
-    }
-
-    /**
-     * Get the current conversation history
-     */
-    getHistory(): HistoryMessage[] {
-        return this.history;
-    }
-
-    /**
-     * Clear the conversation history
-     */
-    clearHistory(): void {
-        this.history = [];
     }
 
     /**
@@ -126,12 +101,35 @@ export abstract class BaseClient {
     abstract validateConnection(): Promise<boolean>;
     abstract setModel(model: string): Promise<void> | void;
     abstract listModels(): Promise<Model[]>;
+
+    /**
+     * Send a prompt to the AI provider
+     * @param prompt - The user's message
+     * @param history - Conversation history (unified format)
+     * @param mcpManager - Optional MCP manager for tools
+     * @param onApproval - Optional approval callback for tools
+     * @param signal - Optional AbortSignal to cancel
+     * @param onChunk - Optional callback for streaming (provider-specific)
+     * @returns The assistant's response and any tool calls made
+     */
     abstract sendPrompt(
         prompt: string,
+        history: Message[],
         mcpManager?: IMcpManager,
         onApproval?: ApprovalCallback,
         signal?: AbortSignal,
-    ): Promise<string>;
+        onChunk?: (chunk: string) => void,
+    ): Promise<SendPromptResult>;
+}
+
+/**
+ * Result from sendPrompt including response and tool interactions
+ */
+export interface SendPromptResult {
+    /** The text response from the model */
+    response: string;
+    /** Tool calls made during this request (to be appended to history) */
+    toolMessages?: Message[];
 }
 
 /**

@@ -6,7 +6,10 @@ export interface Part {
     };
     functionResponse?: {
         name: string;
-        response: Record<string, unknown>;
+        response: {
+            name: string;
+            content: unknown;
+        };
     };
 }
 

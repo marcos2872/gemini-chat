@@ -1,7 +1,8 @@
 import { ConfigPersistence } from './lib/config-persistence';
 import { SETTINGS_KEY } from '../cli/hooks/useChat';
-import { Model, HistoryMessage, IMcpManager, ApprovalCallback } from '../shared/types';
-import { BaseClient, MAX_TOOL_TURNS } from './clients/BaseClient';
+import { Model, IMcpManager, ApprovalCallback, Message } from '../shared/types';
+import { BaseClient, MAX_TOOL_TURNS, SendPromptResult } from './clients/BaseClient';
+import { HistoryConverter, OpenAIMessage } from './services/HistoryConverter';
 
 const GITHUB_API_USER_URL = 'https://api.github.com/user';
 const CONFIG_KEY = 'copilot-auth';
@@ -27,7 +28,6 @@ export class CopilotClient extends BaseClient {
     private apiEndpoint: string | null;
     private tokenExpiresAt: number;
     public modelName: string;
-    protected override history: HistoryMessage[] = [];
     private timeoutMs: number;
     private tokenExchangePromise: Promise<void> | null;
 
@@ -37,7 +37,7 @@ export class CopilotClient extends BaseClient {
         this.apiToken = null;
         this.apiEndpoint = null;
         this.tokenExpiresAt = 0;
-        this.modelName = 'gpt-5-mini';
+        this.modelName = 'gpt-4o-mini';
         this.timeoutMs = 30000;
         this.tokenExchangePromise = null;
     }
@@ -187,7 +187,6 @@ export class CopilotClient extends BaseClient {
             const data = await response.json();
             const models = Array.isArray(data) ? data : data.data || [];
 
-            // Filter
             const validModels = models.filter((m: CopilotModel) => {
                 if (m.model_picker_enabled !== true) return false;
                 if (m.capabilities?.type !== 'chat') return false;
@@ -200,19 +199,21 @@ export class CopilotClient extends BaseClient {
                 name: m.id || m.name,
                 displayName: m.name || m.id,
             }));
-        } catch (error: any) {
-            // eslint-disable-line @typescript-eslint/no-explicit-any
-            this.log.error('Failed to fetch models', { error: error.message });
+        } catch (error) {
+            const err = error as Error;
+            this.log.error('Failed to fetch models', { error: err.message });
             return [];
         }
     }
 
     async sendPrompt(
         prompt: string,
+        history: Message[],
         mcpManager?: IMcpManager,
         onApproval?: ApprovalCallback,
-        _signal?: AbortSignal, // TODO: Implement abort support
-    ): Promise<string> {
+        _signal?: AbortSignal,
+        _onChunk?: (chunk: string) => void,
+    ): Promise<SendPromptResult> {
         if (!this.oauthToken) {
             this.log.error('sendPrompt failed: Not authenticated');
             throw new Error('🔐 Você não está autenticado. Use o comando /auth para fazer login.');
@@ -224,17 +225,18 @@ export class CopilotClient extends BaseClient {
         });
         await this.exchangeToken();
 
-        this.addToHistory('user', prompt);
+        // Convert history to OpenAI format and add current prompt
+        const messages: OpenAIMessage[] = HistoryConverter.toOpenAIFormat(history);
+        messages.push({ role: 'user', content: prompt });
 
-        // Prepare messages from history
-        const messages: unknown[] = this.history.map((m) => ({
-            role: m.role,
-            content: m.content,
-        }));
+        // Track tool messages
+        const toolMessages: Message[] = [];
 
         // Handle Tools
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let openAITools: any[] = [];
+        let openAITools: Array<{
+            type: 'function';
+            function: { name: string; description?: string; parameters?: Record<string, unknown> };
+        }> = [];
 
         if (mcpManager) {
             const tools = await mcpManager.getAllTools();
@@ -314,11 +316,11 @@ export class CopilotClient extends BaseClient {
 
                     if (message.tool_calls && message.tool_calls.length > 0) {
                         this.log.info('Model requested tool calls', {
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            tools: message.tool_calls.map((t: any) => t.function.name),
+                            tools: message.tool_calls.map(
+                                (t: { function: { name: string } }) => t.function.name,
+                            ),
                         });
 
-                        // Execute Tools
                         for (const toolCall of message.tool_calls) {
                             const functionName = toolCall.function.name;
                             const argsString = toolCall.function.arguments;
@@ -337,7 +339,6 @@ export class CopilotClient extends BaseClient {
                                 continue;
                             }
 
-                            // Use base class method for tool execution with approval
                             const { result } = await this.executeToolWithApproval(
                                 functionName,
                                 args as Record<string, unknown>,
@@ -350,13 +351,32 @@ export class CopilotClient extends BaseClient {
                                 tool_call_id: toolCall.id,
                                 content: JSON.stringify(result),
                             });
+
+                            // Track for CLI
+                            toolMessages.push({
+                                role: 'tool',
+                                content: JSON.stringify(result),
+                                timestamp: new Date().toISOString(),
+                                mcpCalls: [
+                                    {
+                                        server: 'mcp',
+                                        toolName: functionName,
+                                        input: args as Record<string, unknown>,
+                                        output: result,
+                                        duration: 0,
+                                        error: false,
+                                    },
+                                ],
+                            });
                         }
                         turn++;
                     } else {
                         if (message.content) {
                             this.log.info('Response received from Copilot');
-                            this.addToHistory('assistant', message.content);
-                            return message.content;
+                            return {
+                                response: message.content,
+                                toolMessages: toolMessages.length > 0 ? toolMessages : undefined,
+                            };
                         } else {
                             this.log.warn('Response contained no content');
                             throw new Error('No content in response');
@@ -366,9 +386,9 @@ export class CopilotClient extends BaseClient {
                     this.log.warn('Response choices array is empty');
                     throw new Error('No content in response');
                 }
-            } catch (error: any) {
-                // eslint-disable-line @typescript-eslint/no-explicit-any
-                this.log.error('Chat request failed', { error: error.message });
+            } catch (error) {
+                const err = error as Error;
+                this.log.error('Chat request failed', { error: err.message });
                 throw error;
             }
         }
@@ -378,27 +398,24 @@ export class CopilotClient extends BaseClient {
             throw new Error('🛑 Limite de turnos da conversa atingido. Inicie uma nova conversa.');
         }
 
-        return '';
+        return { response: '' };
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    _mapToolsToOpenAI(mcpTools: any[]) {
+    _mapToolsToOpenAI(
+        mcpTools: Array<{
+            name: string;
+            description?: string;
+            inputSchema?: Record<string, unknown>;
+        }>,
+    ) {
         return mcpTools.map((tool) => ({
-            type: 'function',
+            type: 'function' as const,
             function: {
                 name: tool.name,
                 description: tool.description,
                 parameters: tool.inputSchema,
             },
         }));
-    }
-
-    override getHistory() {
-        return this.history;
-    }
-
-    override clearHistory(): void {
-        this.history = [];
     }
 
     reset() {

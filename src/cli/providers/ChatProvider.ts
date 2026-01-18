@@ -1,12 +1,14 @@
 import { storage, gemini, copilot, ollama } from '../services';
 import { Provider, Model, Conversation, ApprovalCallback, Message } from '../../shared/types';
 import { McpService } from '../../boot/mcp/McpService';
+import { SendPromptResult } from '../../boot/clients/BaseClient';
 
 /**
  * Options for sending a prompt to a provider.
- * All fields except mcp and onApproval are optional for retrocompatibility.
  */
 export interface SendOptions {
+    /** Conversation history (unified format) */
+    history: Message[];
     /** MCP service for tools */
     mcp: McpService;
     /** Callback for tool approval */
@@ -23,7 +25,7 @@ export interface SendOptions {
  */
 export interface ChatProvider {
     /** Send a prompt and get a response */
-    sendPrompt(text: string, options: SendOptions): Promise<string>;
+    sendPrompt(text: string, options: SendOptions): Promise<SendPromptResult>;
 
     /** Check if provider is configured/authenticated */
     isConfigured(): boolean;
@@ -40,8 +42,6 @@ export interface ChatProvider {
 
 /**
  * Registry mapping provider names to their implementations.
- * Note: The actual clients already implement these methods,
- * we just need to wrap them to match the interface.
  */
 export const getProvider = (providerName: Provider): ChatProvider => {
     switch (providerName) {
@@ -50,6 +50,7 @@ export const getProvider = (providerName: Provider): ChatProvider => {
                 sendPrompt: (text, options) =>
                     gemini.sendPrompt(
                         text,
+                        options.history,
                         options.mcp,
                         options.onApproval,
                         options.signal,
@@ -62,9 +63,15 @@ export const getProvider = (providerName: Provider): ChatProvider => {
             };
         case 'copilot':
             return {
-                // Copilot doesn't support signal/onChunk yet, just pass the basics
                 sendPrompt: (text, options) =>
-                    copilot.sendPrompt(text, options.mcp, options.onApproval),
+                    copilot.sendPrompt(
+                        text,
+                        options.history,
+                        options.mcp,
+                        options.onApproval,
+                        options.signal,
+                        options.onChunk,
+                    ),
                 isConfigured: () => copilot.isConfigured(),
                 setModel: (m) => copilot.setModel(m),
                 listModels: () => copilot.listModels(),
@@ -72,9 +79,15 @@ export const getProvider = (providerName: Provider): ChatProvider => {
             };
         case 'ollama':
             return {
-                // Ollama doesn't support signal/onChunk yet, just pass the basics
                 sendPrompt: (text, options) =>
-                    ollama.sendPrompt(text, options.mcp, options.onApproval),
+                    ollama.sendPrompt(
+                        text,
+                        options.history,
+                        options.mcp,
+                        options.onApproval,
+                        options.signal,
+                        options.onChunk,
+                    ),
                 isConfigured: () => ollama.isConfigured(),
                 setModel: (m) => ollama.setModel(m),
                 listModels: () => ollama.listModels(),
@@ -124,32 +137,42 @@ export const handleChatSubmit = async (
         messages: [...conversation.messages, userMsg],
     };
 
-    // Send to provider with all options
-    const responseText = await providerImpl.sendPrompt(text, {
+    // Send to provider with history
+    const result = await providerImpl.sendPrompt(text, {
+        history: conversation.messages, // Pass existing history (without current prompt)
         mcp,
         onApproval,
         signal: options?.signal,
         onChunk: options?.onChunk,
     });
 
-    // Create AI response message
+    // Build final messages list
+    const newMessages: Message[] = [...conversationWithUser.messages];
+
+    // Add tool messages if any
+    if (result.toolMessages && result.toolMessages.length > 0) {
+        newMessages.push(...result.toolMessages);
+    }
+
+    // Add AI response
     const aiMsg: Message = {
-        role: 'model',
-        content: responseText,
+        role: 'assistant',
+        content: result.response,
         timestamp: new Date().toISOString(),
         provider: provider,
     };
+    newMessages.push(aiMsg);
 
     const finalConversation: Conversation = {
         ...conversationWithUser,
-        messages: [...conversationWithUser.messages, aiMsg],
+        messages: newMessages,
     };
 
     // Save conversation
     await storage.saveConversation(finalConversation);
 
     return {
-        response: responseText,
+        response: result.response,
         updatedConversation: finalConversation,
     };
 };

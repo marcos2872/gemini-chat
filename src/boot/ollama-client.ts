@@ -1,13 +1,7 @@
 import { OllamaToolService } from './services/ollama/OllamaToolService';
-import { IMcpManager, ApprovalCallback, Model, HistoryMessage } from '../shared/types';
-import { BaseClient, MAX_TOOL_TURNS } from './clients/BaseClient';
-
-interface OllamaMessage extends HistoryMessage {
-    tool_calls?: Array<{
-        function: { name: string; arguments: Record<string, unknown> };
-    }>;
-    name?: string;
-}
+import { IMcpManager, ApprovalCallback, Model, Message } from '../shared/types';
+import { BaseClient, MAX_TOOL_TURNS, SendPromptResult } from './clients/BaseClient';
+import { HistoryConverter, OpenAIMessage } from './services/HistoryConverter';
 
 interface OllamaApiResponse {
     message: {
@@ -21,7 +15,6 @@ interface OllamaApiResponse {
 
 export class OllamaClient extends BaseClient {
     public modelName: string;
-    protected override history: OllamaMessage[] = [];
     private baseUrl: string;
     private toolService: OllamaToolService;
 
@@ -88,14 +81,20 @@ export class OllamaClient extends BaseClient {
 
     async sendPrompt(
         prompt: string,
+        history: Message[],
         mcpManager?: IMcpManager,
         onApproval?: ApprovalCallback,
-        _signal?: AbortSignal, // TODO: Implement abort support
-    ): Promise<string> {
-        // 1. Add user message
-        this.history.push({ role: 'user', content: prompt });
+        _signal?: AbortSignal,
+        _onChunk?: (chunk: string) => void,
+    ): Promise<SendPromptResult> {
+        // Convert history to OpenAI format (Ollama uses similar format)
+        const messages: OpenAIMessage[] = HistoryConverter.toOpenAIFormat(history);
+        messages.push({ role: 'user', content: prompt });
 
-        // 2. Prepare Tools
+        // Track tool messages
+        const toolMessages: Message[] = [];
+
+        // Prepare Tools
         let ollamaTools: unknown[] | undefined = undefined;
         if (mcpManager) {
             const tools = await mcpManager.getAllTools();
@@ -109,12 +108,6 @@ export class OllamaClient extends BaseClient {
         let finalAnswer = '';
 
         while (turn < MAX_TOOL_TURNS) {
-            const messages = this.history.map((h) => ({
-                role: h.role,
-                content: h.content,
-                tool_calls: h.tool_calls,
-            }));
-
             try {
                 this.log.info('Sending prompt to Ollama', { model: this.modelName, turn });
 
@@ -156,11 +149,17 @@ export class OllamaClient extends BaseClient {
                 const message = data.message;
                 const responseText = message?.content || '';
 
-                // Push assistant response to history
-                this.history.push({
-                    role: message.role,
+                // Push assistant response to messages
+                messages.push({
+                    role: message.role as 'user' | 'assistant' | 'system' | 'tool',
                     content: responseText,
-                    tool_calls: message.tool_calls,
+                    tool_calls: message.tool_calls?.map((tc, idx) => ({
+                        id: `call_${idx}`,
+                        function: {
+                            name: tc.function.name,
+                            arguments: JSON.stringify(tc.function.arguments),
+                        },
+                    })),
                 });
 
                 // Check for tool calls
@@ -174,7 +173,7 @@ export class OllamaClient extends BaseClient {
                         const args = toolCall.function.arguments;
 
                         if (!mcpManager) {
-                            this.history.push({
+                            messages.push({
                                 role: 'tool',
                                 content: JSON.stringify({ error: 'McpManager not available' }),
                                 name: functionName,
@@ -182,7 +181,6 @@ export class OllamaClient extends BaseClient {
                             continue;
                         }
 
-                        // Use base class method for tool execution with approval
                         const { result } = await this.executeToolWithApproval(
                             functionName,
                             args as Record<string, unknown>,
@@ -190,10 +188,27 @@ export class OllamaClient extends BaseClient {
                             onApproval,
                         );
 
-                        this.history.push({
+                        messages.push({
                             role: 'tool',
                             content: JSON.stringify(result),
                             name: functionName,
+                        });
+
+                        // Track for CLI
+                        toolMessages.push({
+                            role: 'tool',
+                            content: JSON.stringify(result),
+                            timestamp: new Date().toISOString(),
+                            mcpCalls: [
+                                {
+                                    server: 'mcp',
+                                    toolName: functionName,
+                                    input: args as Record<string, unknown>,
+                                    output: result,
+                                    duration: 0,
+                                    error: false,
+                                },
+                            ],
                         });
                     }
 
@@ -219,10 +234,13 @@ export class OllamaClient extends BaseClient {
             }
         }
 
-        return finalAnswer;
+        return {
+            response: finalAnswer,
+            toolMessages: toolMessages.length > 0 ? toolMessages : undefined,
+        };
     }
 
     reset() {
-        this.clearHistory();
+        // No persistent state to clear
     }
 }
