@@ -151,7 +151,12 @@ export const handleChatSubmit = async (
 
     // Add tool messages if any
     if (result.toolMessages && result.toolMessages.length > 0) {
-        newMessages.push(...result.toolMessages);
+        // Ensure provider is set on tool messages
+        const messagesWithProvider = result.toolMessages.map((msg) => ({
+            ...msg,
+            provider: provider,
+        }));
+        newMessages.push(...messagesWithProvider);
     }
 
     // Add AI response

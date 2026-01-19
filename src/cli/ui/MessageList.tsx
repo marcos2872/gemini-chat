@@ -13,6 +13,7 @@ interface Message {
     content: string;
     timestamp: string;
     provider?: string;
+    tool_calls?: any[];
 }
 
 interface MessageItemProps {
@@ -104,7 +105,14 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
 
         // Filter out tool messages - they're for history context only, not display
         const displayMessages = useMemo(() => {
-            return messages.filter((msg) => msg.role !== 'tool');
+            return messages.filter((msg) => {
+                if (msg.role === 'tool') return false;
+                // Filter out assistant messages that only have tool calls (no text content)
+                if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
+                    return msg.content && msg.content.trim().length > 0;
+                }
+                return true;
+            });
         }, [messages]);
 
         // Calculate total content height in lines
