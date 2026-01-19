@@ -7,6 +7,7 @@ import { Header } from './Header';
 import { MainContent } from './MainContent';
 import { MessageListHandle } from './MessageList';
 import { HistoryModal } from './HistoryModal';
+import { OllamaConfigModal } from './OllamaConfigModal';
 import { ProviderOption } from './ProviderSelector';
 import { CHAT_MODES } from '../../shared/types';
 
@@ -17,6 +18,7 @@ export const App = () => {
         rows: stdout?.rows || 24,
     });
     const [showHistory, setShowHistory] = useState(false);
+    const [showOllamaConfig, setShowOllamaConfig] = useState(false);
 
     useEffect(() => {
         const onResize = () => {
@@ -95,7 +97,11 @@ export const App = () => {
                 chat.setMode(CHAT_MODES.PROVIDER_SELECTOR);
             }
             if (_input === 'a') {
-                await handleCommand('auth', []);
+                if (chat.provider === 'ollama') {
+                    setShowOllamaConfig(true);
+                } else {
+                    await handleCommand('auth', []);
+                }
             }
             if (_input === 'c') {
                 setShowHistory(true);
@@ -144,6 +150,18 @@ export const App = () => {
         );
     }
 
+    if (showOllamaConfig) {
+        return (
+            <OllamaConfigModal
+                onClose={() => {
+                    setShowOllamaConfig(false);
+                    // Force re-check status in case URL changed
+                    chat.checkConnection();
+                }}
+            />
+        );
+    }
+
     return (
         <Box flexDirection="column" height={dimensions.rows} width={dimensions.columns}>
             <Box flexShrink={0}>
@@ -174,7 +192,7 @@ export const App = () => {
                     <Text color="gray">
                         {chat.isProcessing
                             ? '[Alt+X]-Cancel'
-                            : '[Alt+M]-Model [Alt+P]-Provider [Alt+T]-Tools [Alt+A]-Auth [Alt+N]-New [Alt+C]-Chats [Alt+H]-Help [Alt+Q]-Quit'}
+                            : `[Alt+M]-Model [Alt+P]-Provider [Alt+T]-Tools [Alt+A]-${chat.provider === 'ollama' ? 'Config' : 'Auth'} [Alt+N]-New [Alt+C]-Chats [Alt+H]-Help [Alt+Q]-Quit`}
                     </Text>
                 </Box>
             </Box>

@@ -7,6 +7,7 @@ import {
     handleTokensCommand,
 } from './conversation.command';
 import { handleHelpCommand, handleLogsCommand, handleExitCommand } from './help.command';
+import { handleConfigCommand } from './config.command';
 
 export type CommandHandler = (ctx: CommandContext, args: string[]) => Promise<void> | void;
 
@@ -21,6 +22,7 @@ export const commands: Record<string, CommandHandler> = {
     compress: (ctx) => handleCompressCommand(ctx),
     tokens: (ctx) => handleTokensCommand(ctx),
     logs: (ctx) => handleLogsCommand(ctx),
+    config: (ctx, args) => handleConfigCommand(ctx, args),
     exit: () => handleExitCommand(),
 };
 

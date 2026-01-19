@@ -1,5 +1,5 @@
 import { useCallback, useState, useRef } from 'react';
-import { mcpService } from '../services';
+import { mcpService, ollama, gemini, copilot } from '../services';
 import { createLogger } from '../../boot/lib/logger';
 import {
     Provider,
@@ -61,6 +61,9 @@ export interface CommandContext {
     mcpServers: McpServer[];
     refreshMcpServers: () => Promise<void>;
     toggleMcpServer: (name: string) => Promise<void>;
+
+    // Helpers
+    checkConnection: () => Promise<void>;
 }
 
 /**
@@ -204,5 +207,17 @@ export const useChat = (): CommandContext => {
         mcpServers: mcpManager.mcpServers,
         refreshMcpServers: mcpManager.refreshMcpServers,
         toggleMcpServer: mcpManager.toggleMcpServer,
+
+        checkConnection: useCallback(async () => {
+            if (state.provider === 'ollama') {
+                state.setStatus('Checking Ollama...');
+                const connected = await ollama.validateConnection();
+                state.setStatus(connected ? 'Ready' : 'Ollama Not Detected');
+            } else if (state.provider === 'gemini') {
+                state.setStatus(gemini.isConfigured() ? 'Ready' : 'Not Authenticated');
+            } else if (state.provider === 'copilot') {
+                state.setStatus(copilot.isConfigured() ? 'Ready' : 'Not Authenticated');
+            }
+        }, [state]),
     };
 };

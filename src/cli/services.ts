@@ -5,6 +5,7 @@ import { CopilotAuthService } from '../boot/auth/CopilotAuthService';
 import { OllamaClient } from '../boot/clients/OllamaClient';
 import { ConversationStorage } from '../boot/services/ConversationStorageService';
 import { McpService } from '../boot/mcp/McpService';
+import { ConfigService } from '../boot/services/ConfigService';
 
 /**
  * ServiceContainer manages dependency injection for the application.
@@ -19,6 +20,7 @@ export class ServiceContainer {
     private _copilot: CopilotClient | null = null;
     private _copilotAuth: CopilotAuthService | null = null;
     private _ollama: OllamaClient | null = null;
+    private _configService: ConfigService | null = null;
 
     private constructor() {}
 
@@ -60,6 +62,11 @@ export class ServiceContainer {
         return this._ollama;
     }
 
+    get configService(): ConfigService {
+        if (!this._configService) this._configService = new ConfigService();
+        return this._configService;
+    }
+
     // Dependency Injection methods for testing
     setStorage(mock: ConversationStorage) {
         this._storage = mock;
@@ -79,6 +86,9 @@ export class ServiceContainer {
     setOllama(mock: OllamaClient) {
         this._ollama = mock;
     }
+    setConfigService(mock: ConfigService) {
+        this._configService = mock;
+    }
 
     // Reset all services (useful for cleanup between tests)
     reset() {
@@ -88,6 +98,7 @@ export class ServiceContainer {
         this._copilot = null;
         this._copilotAuth = null;
         this._ollama = null;
+        this._configService = null;
     }
 }
 
@@ -109,3 +120,4 @@ export const gemini = services.gemini;
 export const copilot = services.copilot;
 export const copilotAuth = services.copilotAuth;
 export const ollama = services.ollama;
+export const configService = services.configService;

@@ -11,6 +11,7 @@ interface InputProps {
 
 export const Input = ({ onSubmit, isActive, placeholder }: InputProps) => {
     const [value, setValue] = useState('');
+    const [cursorPos, setCursorPos] = useState(0);
     const [cursorVisible, setCursorVisible] = useState(true);
 
     // Blinking cursor effect
@@ -29,12 +30,26 @@ export const Input = ({ onSubmit, isActive, placeholder }: InputProps) => {
             if (value.trim()) {
                 onSubmit(value);
                 setValue('');
+                setCursorPos(0);
             }
             return;
         }
 
-        if (key.delete) {
-            setValue((prev) => prev.slice(0, -1));
+        if (key.leftArrow) {
+            setCursorPos((prev) => Math.max(0, prev - 1));
+            return;
+        }
+
+        if (key.rightArrow) {
+            setCursorPos((prev) => Math.min(value.length, prev + 1));
+            return;
+        }
+
+        if (key.delete || key.backspace) {
+            if (cursorPos > 0) {
+                setValue((prev) => prev.slice(0, cursorPos - 1) + prev.slice(cursorPos));
+                setCursorPos((prev) => prev - 1);
+            }
             return;
         }
 
@@ -48,14 +63,9 @@ export const Input = ({ onSubmit, isActive, placeholder }: InputProps) => {
             return;
         }
 
-        setValue((prev) => prev + input);
+        setValue((prev) => prev.slice(0, cursorPos) + input + prev.slice(cursorPos));
+        setCursorPos((prev) => prev + input.length);
     });
-
-    // Memoize cursor to prevent unnecessary re-renders
-    const cursor = useMemo(
-        () => (isActive && cursorVisible ? '█' : ' '),
-        [isActive, cursorVisible],
-    );
 
     // Memoize placeholder display to prevent unnecessary re-renders
     const showPlaceholder = useMemo(
@@ -74,11 +84,18 @@ export const Input = ({ onSubmit, isActive, placeholder }: InputProps) => {
         );
     }
 
+    const preCursor = value.slice(0, cursorPos);
+    const cursorChar = cursorPos < value.length ? value[cursorPos] : ' ';
+    const postCursor = value.slice(cursorPos + 1);
+
     return (
         <Box>
             <Text color="green">{'> '}</Text>
-            <Text>{value}</Text>
-            <Text color="green">{cursor}</Text>
+            <Text>{preCursor}</Text>
+            <Text color="green" inverse={cursorVisible}>
+                {cursorChar}
+            </Text>
+            <Text>{postCursor}</Text>
             {showPlaceholder && <Text color="gray"> {placeholder}</Text>}
         </Box>
     );

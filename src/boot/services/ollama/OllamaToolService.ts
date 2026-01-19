@@ -18,7 +18,12 @@ export class OllamaToolService {
     }
 
     private sanitizeSchema(schema: any): any {
-        if (!schema || typeof schema !== 'object') return schema;
+        if (!schema || typeof schema !== 'object' || Object.keys(schema).length === 0) {
+            return {
+                type: 'object',
+                properties: {},
+            };
+        }
         const clean = { ...schema };
 
         // Ensure type is clearly defined for fields

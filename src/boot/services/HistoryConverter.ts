@@ -8,9 +8,10 @@ import { Message, GeminiContent, GeminiPart } from '../../shared/types';
  */
 export interface OpenAIMessage {
     role: 'user' | 'assistant' | 'system' | 'tool';
-    content: string;
+    content: string | null;
     tool_calls?: Array<{
         id?: string;
+        type: 'function';
         function: { name: string; arguments: string };
     }>;
     tool_call_id?: string;
@@ -102,13 +103,14 @@ export class HistoryConverter {
 
             const openAIMsg: OpenAIMessage = {
                 role: this.mapRoleToOpenAI(msg.role),
-                content: msg.content || '',
+                content: msg.content || null,
             };
 
             // Handle tool calls from assistant
             if (msg.tool_calls && msg.tool_calls.length > 0) {
                 openAIMsg.tool_calls = msg.tool_calls.map((tc, idx) => ({
                     id: tc.id || `call_${tc.function.name}_${idx}`,
+                    type: 'function',
                     function: {
                         name: tc.function.name,
                         arguments:

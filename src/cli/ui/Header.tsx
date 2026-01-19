@@ -10,7 +10,10 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ provider, model, status }) => {
-    const isAuth = status !== 'Not Authenticated';
+    const isAuth =
+        status !== 'Not Authenticated' &&
+        status !== 'Ollama Not Detected' &&
+        !status.startsWith('Error:');
     // Only show model if Ready/Thinking
     const isReady = status === 'Ready' || status === 'Thinking...';
 
